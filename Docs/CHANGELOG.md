@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.0 — freestyle core
+
+**Tricks you can combine**
+- Free air rotation replaces the fixed flip/spin buttons: W/S (or F/G) flip, A/D (or Q/E) spin. Any amount, so 180s, 360s, 540s, backflips, frontflips and doubles all happen naturally. When you let go near a full turn the rotation settles onto it.
+- Flips and spins layer with every bike/body trick, so a backflip tailwhip or a 360 superman works.
+- 10 style tricks: barspin, tailwhip (now swings round the head tube), no-hander, superman, can-can, X-up, turndown, tabletop, nothing, tuck no-hander. Hold tricks keep scoring while held. Landing while still holding one is a "tied up" bail.
+- Landings are judged on rotation: within 50° of a whole flip and a half spin. Landing a 180 rides away fakie.
+- Fixed: the old "backflip" actually rotated forward.
+
+**Manuals and combos**
+- Hold Shift on the ground to manual, keeping the balance meter centred with W/S. Too far back loops out, too far forward drops the nose.
+- Land holding Shift (or press it within 0.3 s) to keep the combo going. Hop out of a manual and the combo carries into the next air.
+
+**Riding**
+- Charged bunny hop: tap for 0.9x, hold Space up to 0.35 s for 1.3x height (about 1.6 s of air on flat).
+- In the air A/D now spin instead of steering.
+- Only quarter-pipes give vert airs. Ramps are tagged, so steep dirt lips launch you forward.
+
+**Park**
+- Three-set dirt jump line along the south edge (press 2 to start there, 1 for the park). Each set has a 1.3 m lip, a 2.8 m gap and a long landing. About 36–45 km/h lands on the downslope, checked with a 2D trajectory calculation.
+
+**Rider model**
+- New hip and shoulder joints so poses move the torso and arms.
+
+Not yet compiled in UE 5.8: run `BUILD_EDITOR.bat`, see `Docs/V030_PLAYTEST.md`.
+
+
 ## 0.2.0 — slope physics and vert airs
 
 **Riding**

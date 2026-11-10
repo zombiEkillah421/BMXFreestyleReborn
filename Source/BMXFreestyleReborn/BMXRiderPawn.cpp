@@ -50,6 +50,16 @@ ABMXRiderPawn::ABMXRiderPawn()
     RightLegPivot = CreateDefaultSubobject<USceneComponent>(TEXT("RightLegAnimation"));
     RightLegPivot->SetupAttachment(TrickPivot);
     RightLegPivot->SetRelativeLocation(FVector(-23,14,71));
+    // v0.3.0 upper-body joints: hips (torso/head/arms) and both shoulders.
+    RiderUpperPivot = CreateDefaultSubobject<USceneComponent>(TEXT("RiderUpperBody"));
+    RiderUpperPivot->SetupAttachment(TrickPivot);
+    RiderUpperPivot->SetRelativeLocation(FVector(-23,0,75));
+    LeftArmPivot = CreateDefaultSubobject<USceneComponent>(TEXT("LeftArmAnimation"));
+    LeftArmPivot->SetupAttachment(RiderUpperPivot);
+    LeftArmPivot->SetRelativeLocation(FVector(29,-13,38));   // shoulder (6,-13,113) in TrickPivot space
+    RightArmPivot = CreateDefaultSubobject<USceneComponent>(TEXT("RightArmAnimation"));
+    RightArmPivot->SetupAttachment(RiderUpperPivot);
+    RightArmPivot->SetRelativeLocation(FVector(29,13,38));
 
     CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
     CameraBoom->SetupAttachment(Collider);
@@ -91,13 +101,14 @@ ABMXRiderPawn::ABMXRiderPawn()
     MakePart(TEXT("Crank"), BikeBodyPivot, Cylinder, FVector(-8,0,6), FVector(0.13f,0.13f,0.15f), FRotator(0,0,90));
 
     // Jointed placeholder rider: simple leg motion is visibly linked to pedaling.
-    MakeRod(TEXT("RiderTorso"), TrickPivot, Cube, FVector(-23,0,75), FVector(10,0,115), 20.0f);
-    MakePart(TEXT("RiderHead"), TrickPivot, Sphere, FVector(18,0,135), FVector(0.22f,0.22f,0.24f));
-    MakePart(TEXT("RiderHelmet"), TrickPivot, Sphere, FVector(18,0,145), FVector(0.26f,0.26f,0.11f));
-    MakeRod(TEXT("UpperArmLeft"), TrickPivot, Cube, FVector(6,-13,113), FVector(30,-21,89), 8.0f);
-    MakeRod(TEXT("LowerArmLeft"), TrickPivot, Cube, FVector(30,-21,89), FVector(58,-30,65), 7.0f);
-    MakeRod(TEXT("UpperArmRight"), TrickPivot, Cube, FVector(6,13,113), FVector(30,21,89), 8.0f);
-    MakeRod(TEXT("LowerArmRight"), TrickPivot, Cube, FVector(30,21,89), FVector(58,30,65), 7.0f);
+    // Same shapes and places as before, now relative to the new joints.
+    MakeRod(TEXT("RiderTorso"), RiderUpperPivot, Cube, FVector(0,0,0), FVector(33,0,40), 20.0f);
+    MakePart(TEXT("RiderHead"), RiderUpperPivot, Sphere, FVector(41,0,60), FVector(0.22f,0.22f,0.24f));
+    MakePart(TEXT("RiderHelmet"), RiderUpperPivot, Sphere, FVector(41,0,70), FVector(0.26f,0.26f,0.11f));
+    MakeRod(TEXT("UpperArmLeft"), LeftArmPivot, Cube, FVector(0,0,0), FVector(24,-8,-24), 8.0f);
+    MakeRod(TEXT("LowerArmLeft"), LeftArmPivot, Cube, FVector(24,-8,-24), FVector(52,-17,-48), 7.0f);
+    MakeRod(TEXT("UpperArmRight"), RightArmPivot, Cube, FVector(0,0,0), FVector(24,8,-24), 8.0f);
+    MakeRod(TEXT("LowerArmRight"), RightArmPivot, Cube, FVector(24,8,-24), FVector(52,17,-48), 7.0f);
     MakeRod(TEXT("LeftThigh"), LeftLegPivot, Cube, FVector::ZeroVector, FVector(26,0,-22), 10.5f);
     MakeRod(TEXT("LeftShin"), LeftLegPivot, Cube, FVector(26,0,-22), FVector(28,0,-64), 9.0f);
     MakePart(TEXT("LeftShoe"), LeftLegPivot, Cube, FVector(32,0,-65), FVector(0.20f,0.12f,0.075f));
@@ -160,6 +171,29 @@ void ABMXRiderPawn::MakeWheel(const FString& Prefix, USceneComponent* Parent,
              FVector(0.09f,0.09f,0.16f), FRotator(0,0,90));
 }
 
+namespace BMXStyle
+{
+    // Name, base points, and either duration (timed) or minimum hold (hold tricks).
+    struct FDef { const TCHAR* Name; int32 Points; float Seconds; bool bTimed; };
+    static FDef Get(EBMXStyleTrick Trick)
+    {
+        switch (Trick)
+        {
+            case EBMXStyleTrick::Barspin:      return { TEXT("BARSPIN"),        150, 0.42f, true  };
+            case EBMXStyleTrick::Tailwhip:     return { TEXT("TAILWHIP"),       300, 0.60f, true  };
+            case EBMXStyleTrick::NoHander:     return { TEXT("NO-HANDER"),      200, 0.30f, false };
+            case EBMXStyleTrick::Superman:     return { TEXT("SUPERMAN"),       300, 0.35f, false };
+            case EBMXStyleTrick::CanCan:       return { TEXT("CAN-CAN"),        200, 0.30f, false };
+            case EBMXStyleTrick::XUp:          return { TEXT("X-UP"),           180, 0.30f, false };
+            case EBMXStyleTrick::Turndown:     return { TEXT("TURNDOWN"),       220, 0.30f, false };
+            case EBMXStyleTrick::Tabletop:     return { TEXT("TABLETOP"),       260, 0.35f, false };
+            case EBMXStyleTrick::Nothing:      return { TEXT("NOTHING"),        400, 0.40f, false };
+            case EBMXStyleTrick::TuckNoHander: return { TEXT("TUCK NO-HANDER"), 250, 0.30f, false };
+            default:                           return { TEXT(""),                 0, 0.0f,  true  };
+        }
+    }
+}
+
 void ABMXRiderPawn::UpdateVisualMotion(float Dt)
 {
     // As the bike translates, the hollow wheel mesh rotates at roughly tire-contact speed.
@@ -169,20 +203,106 @@ void ABMXRiderPawn::UpdateVisualMotion(float Dt)
     RearWheelPivot->SetRelativeRotation(FRotator(WheelRotationDeg,0,0));
     FrontWheelPivot->SetRelativeRotation(FRotator(WheelRotationDeg,0,0));
     const float NormalizedSpeed = FMath::Clamp(FMath::Abs(SpeedCmPerSec) / 600.0f, 0.0f, 1.0f);
-    const float PedalWeight = NormalizedSpeed * (ThrottleInput > 0.05f ? 1.0f : 0.12f);
+    const bool bPedaling = bGrounded && !bInManual && ThrottleInput > 0.05f;
+    const float PedalWeight = NormalizedSpeed * (bPedaling ? 1.0f : 0.12f);
     PedalPhase = FMath::Fmod(PedalPhase + Dt * FMath::Abs(SpeedCmPerSec) / 65.0f, 2.0f * PI);
     const float PedalSwing = 20.0f * PedalWeight;
-    LeftLegPivot->SetRelativeRotation(FRotator(FMath::Sin(PedalPhase) * PedalSwing,0,0));
-    RightLegPivot->SetRelativeRotation(FRotator(-FMath::Sin(PedalPhase) * PedalSwing,0,0));
-    if (!bHasActiveTrick)
+
+    // ---- Base (riding) pose ----
+    FRotator LeftLeg(FMath::Sin(PedalPhase) * PedalSwing, 0, 0);
+    FRotator RightLeg(-FMath::Sin(PedalPhase) * PedalSwing, 0, 0);
+    FRotator Upper(-8.0f * (bHopCharging ? HopCharge / FMath::Max(0.05f, HopChargeSeconds) : 0.0f), 0, 0);
+    FRotator LeftArm = FRotator::ZeroRotator;
+    FRotator RightArm = FRotator::ZeroRotator;
+    FRotator Bike = FRotator::ZeroRotator;
+    FVector BikeOffset = FVector::ZeroVector;
+    float BarYaw = SteeringInput * 22.0f;
+
+    // ---- Style trick pose, blended by StylePoseAlpha ----
+    const float A = StylePoseAlpha;
+    // FRotator components are doubles in UE5; blend in double to avoid narrowing.
+    auto Blend = [A](double From, double To) { return FMath::Lerp(From, To, static_cast<double>(A)); };
+    switch (PoseStyle)
     {
-        const float Lean = -SteeringInput * FMath::Clamp(NormalizedSpeed,0.0f,1.0f) * 8.0f;
-        TrickPivot->SetRelativeRotation(FRotator(FloorPitchDeg,0,Lean));
+        case EBMXStyleTrick::NoHander:
+            LeftArm = FRotator(60.0f * A, 0, -65.0f * A);
+            RightArm = FRotator(60.0f * A, 0, 65.0f * A);
+            break;
+        case EBMXStyleTrick::Superman:
+            Upper.Pitch = Blend(Upper.Pitch, -32.0f);
+            LeftLeg = FRotator(Blend(LeftLeg.Pitch, -100.0f), 0, -8.0f * A);
+            RightLeg = FRotator(Blend(RightLeg.Pitch, -100.0f), 0, 8.0f * A);
+            break;
+        case EBMXStyleTrick::CanCan:
+            LeftLeg = FRotator(Blend(LeftLeg.Pitch, 25.0f), 0, 75.0f * A);
+            break;
+        case EBMXStyleTrick::XUp:
+            BarYaw = Blend(BarYaw, 180.0f);
+            break;
+        case EBMXStyleTrick::Turndown:
+            BarYaw = Blend(BarYaw, 90.0f);
+            Bike.Roll = 30.0f * A;
+            Upper.Roll = -12.0f * A;
+            break;
+        case EBMXStyleTrick::Tabletop:
+            Bike.Roll = 70.0f * A;
+            Upper.Roll = -18.0f * A;
+            LeftLeg.Roll = 25.0f * A;
+            RightLeg.Roll = 25.0f * A;
+            break;
+        case EBMXStyleTrick::Nothing:
+            Upper.Pitch = Blend(Upper.Pitch, -20.0f);
+            LeftArm = FRotator(60.0f * A, 0, -65.0f * A);
+            RightArm = FRotator(60.0f * A, 0, 65.0f * A);
+            LeftLeg = FRotator(Blend(LeftLeg.Pitch, -95.0f), 0, -25.0f * A);
+            RightLeg = FRotator(Blend(RightLeg.Pitch, -95.0f), 0, 25.0f * A);
+            break;
+        case EBMXStyleTrick::TuckNoHander:
+            LeftArm = FRotator(70.0f * A, 0, -40.0f * A);
+            RightArm = FRotator(70.0f * A, 0, 40.0f * A);
+            LeftLeg.Pitch = Blend(LeftLeg.Pitch, 40.0f);
+            RightLeg.Pitch = Blend(RightLeg.Pitch, 40.0f);
+            break;
+        default: break;
     }
-    if (!bHasActiveTrick || ActiveTrick.Type != EBMXTrickType::Barspin)
+    // Timed tricks animate by progress rather than pose blend.
+    if (ActiveStyle == EBMXStyleTrick::Barspin || ActiveStyle == EBMXStyleTrick::Tailwhip)
     {
-        HandlePivot->SetRelativeRotation(FRotator(0,SteeringInput * 22.0f,0));
+        const BMXStyle::FDef Def = BMXStyle::Get(ActiveStyle);
+        const float Progress = FMath::Clamp(StyleElapsed / FMath::Max(0.05f, Def.Seconds), 0.0f, 1.0f);
+        const float Angle = 360.0f * FMath::InterpEaseInOut(0.0f, 1.0f, Progress, 1.4f);
+        if (ActiveStyle == EBMXStyleTrick::Barspin)
+        {
+            BarYaw = Angle;
+        }
+        else
+        {
+            // Tailwhip: the frame swings round the head tube while the bars
+            // stay in the rider's hands (counter-rotated).
+            Bike.Yaw = Angle;
+            const FVector HeadTube(52.0f, 0.0f, 0.0f);
+            BikeOffset = HeadTube - FRotator(0.0f, Angle, 0.0f).RotateVector(HeadTube);
+            BarYaw = -Angle;
+        }
     }
+
+    LeftLegPivot->SetRelativeRotation(LeftLeg);
+    RightLegPivot->SetRelativeRotation(RightLeg);
+    RiderUpperPivot->SetRelativeRotation(Upper);
+    LeftArmPivot->SetRelativeRotation(LeftArm);
+    RightArmPivot->SetRelativeRotation(RightArm);
+    BikeBodyPivot->SetRelativeLocationAndRotation(BikeOffset, Bike);
+    HandlePivot->SetRelativeRotation(FRotator(0.0f, BarYaw, 0.0f));
+
+    // ---- Whole-rider orientation: slope + flips + spins + manual ----
+    const float Lean = (bGrounded ? -SteeringInput * NormalizedSpeed * 8.0f : 0.0f);
+    const float ManualPitch = ManualAlpha * (16.0f + 10.0f * ManualBalance);
+    // A manual pivots round the REAR axle, so the back wheel stays planted.
+    const FVector RearAxle(-63.0f, 0.0f, -20.0f);
+    const FVector ManualOffset = RearAxle - FRotator(ManualPitch, 0.0f, 0.0f).RotateVector(RearAxle);
+    TrickPivot->SetRelativeLocationAndRotation(FVector(0.0f, 0.0f, 55.0f) + ManualOffset,
+        FRotator(FloorPitchDeg + FlipAngleDeg + ManualPitch, SpinAngleDeg, Lean));
+
     // Vert air: the whole rider + bike visibly turns 180 degrees while the
     // actor keeps its heading; the heading itself flips on landing.
     VisualRoot->SetRelativeRotation(FRotator(0.0f, VertAirYawDeg, 0.0f));
@@ -192,7 +312,7 @@ void ABMXRiderPawn::BeginPlay()
 {
     Super::BeginPlay();
     ResetBike();
-    ShowStatus(TEXT("TRAINING PARK  |  HOLD W TO PEDAL, SPACE TO HOP"), 5.0f);
+    ShowStatus(TEXT("v0.3.0  |  SHIFT = MANUAL   HOLD SPACE = BIG HOP   2 = DIRT JUMPS"), 6.0f);
 }
 
 void ABMXRiderPawn::PossessedBy(AController* NewController)
@@ -205,6 +325,9 @@ void ABMXRiderPawn::PossessedBy(AController* NewController)
     }
 }
 
+// Lets one handler serve every style-trick button (the trick is the payload).
+DECLARE_DELEGATE_OneParam(FBMXStyleInputDelegate, EBMXStyleTrick);
+
 void ABMXRiderPawn::SetupPlayerInputComponent(UInputComponent* Input)
 {
     Super::SetupPlayerInputComponent(Input);
@@ -213,17 +336,43 @@ void ABMXRiderPawn::SetupPlayerInputComponent(UInputComponent* Input)
     Input->BindAxis(TEXT("Steer"), this, &ABMXRiderPawn::SetSteering);
     Input->BindAxis(TEXT("CameraYaw"), this, &ABMXRiderPawn::OrbitYaw);
     Input->BindAxis(TEXT("CameraPitch"), this, &ABMXRiderPawn::OrbitPitch);
-    Input->BindAction(TEXT("Hop"), IE_Pressed, this, &ABMXRiderPawn::Hop);
-    Input->BindAction(TEXT("Barspin"), IE_Pressed, this, &ABMXRiderPawn::Barspin);
-    Input->BindAction(TEXT("Tailwhip"), IE_Pressed, this, &ABMXRiderPawn::Tailwhip);
-    Input->BindAction(TEXT("SpinLeft"), IE_Pressed, this, &ABMXRiderPawn::SpinLeft);
-    Input->BindAction(TEXT("SpinRight"), IE_Pressed, this, &ABMXRiderPawn::SpinRight);
-    Input->BindAction(TEXT("Backflip"), IE_Pressed, this, &ABMXRiderPawn::Backflip);
-    Input->BindAction(TEXT("Frontflip"), IE_Pressed, this, &ABMXRiderPawn::Frontflip);
+    Input->BindAxis(TEXT("FlipAxis"), this, &ABMXRiderPawn::SetFlipAxis);
+    Input->BindAxis(TEXT("SpinAxis"), this, &ABMXRiderPawn::SetSpinAxis);
+    Input->BindAction(TEXT("Hop"), IE_Pressed, this, &ABMXRiderPawn::HopPressed);
+    Input->BindAction(TEXT("Hop"), IE_Released, this, &ABMXRiderPawn::HopReleased);
+    Input->BindAction(TEXT("Manual"), IE_Pressed, this, &ABMXRiderPawn::ManualPressed);
+    Input->BindAction(TEXT("Manual"), IE_Released, this, &ABMXRiderPawn::ManualReleased);
+
+    struct FStyleAction { const TCHAR* Name; EBMXStyleTrick Trick; };
+    const FStyleAction StyleActions[] = {
+        { TEXT("Barspin"),      EBMXStyleTrick::Barspin },
+        { TEXT("Tailwhip"),     EBMXStyleTrick::Tailwhip },
+        { TEXT("NoHander"),     EBMXStyleTrick::NoHander },
+        { TEXT("Superman"),     EBMXStyleTrick::Superman },
+        { TEXT("CanCan"),       EBMXStyleTrick::CanCan },
+        { TEXT("XUp"),          EBMXStyleTrick::XUp },
+        { TEXT("Turndown"),     EBMXStyleTrick::Turndown },
+        { TEXT("Tabletop"),     EBMXStyleTrick::Tabletop },
+        { TEXT("Nothing"),      EBMXStyleTrick::Nothing },
+        { TEXT("TuckNoHander"), EBMXStyleTrick::TuckNoHander },
+    };
+    for (const FStyleAction& Action : StyleActions)
+    {
+        Input->BindAction<FBMXStyleInputDelegate>(FName(Action.Name), IE_Pressed, this,
+            &ABMXRiderPawn::StylePressed, Action.Trick);
+        Input->BindAction<FBMXStyleInputDelegate>(FName(Action.Name), IE_Released, this,
+            &ABMXRiderPawn::StyleReleased, Action.Trick);
+    }
+
     Input->BindAction(TEXT("Reset"), IE_Pressed, this, &ABMXRiderPawn::ResetBike);
+    Input->BindAction(TEXT("DirtLine"), IE_Pressed, this, &ABMXRiderPawn::ResetToDirtLine);
+    Input->BindAction(TEXT("ParkStart"), IE_Pressed, this, &ABMXRiderPawn::ResetToPark);
     Input->BindAction(TEXT("RecenterCamera"), IE_Pressed, this, &ABMXRiderPawn::RecenterCamera);
     Input->BindAction(TEXT("ToggleDebug"), IE_Pressed, this, &ABMXRiderPawn::ToggleDebugHUD);
 }
+
+void ABMXRiderPawn::SetFlipAxis(float Value) { FlipAxisInput = FMath::Clamp(Value,-1.0f,1.0f); }
+void ABMXRiderPawn::SetSpinAxis(float Value) { SpinAxisInput = FMath::Clamp(Value,-1.0f,1.0f); }
 
 void ABMXRiderPawn::ToggleDebugHUD() { bShowDebugHUD = !bShowDebugHUD; }
 
@@ -277,6 +426,7 @@ bool ABMXRiderPawn::ProbeWheel(const FVector& PawnCenter, float ForwardOffset,
     // 0.35 (~69 degrees) allows the ~62 degree tops of the v0.2 quarter-pipes.
     if (Hit.ImpactNormal.Z < 0.35f || Hit.bStartPenetrating) return false;
     Contact.bSupported = true;
+    Contact.bQuarterPipe = Hit.GetComponent() && Hit.GetComponent()->ComponentHasTag(FName(TEXT("BMX_QUARTER")));
     Contact.FloorZ = Hit.ImpactPoint.Z;
     Contact.Normal = Hit.ImpactNormal;
     return true;
@@ -332,6 +482,29 @@ void ABMXRiderPawn::Tick(float DeltaSeconds)
         return;
     }
 
+    if (bHopCharging)
+    {
+        if (bGrounded) HopCharge = FMath::Min(HopChargeSeconds, HopCharge + TotalDt);
+        else bHopCharging = false;
+    }
+    UpdateManual(TotalDt);
+    // Combo link window after a clean landing: press manual to keep the
+    // combo going, otherwise it banks. Leaving the ground also banks it.
+    if (LandingLinkSeconds > 0.0f)
+    {
+        LandingLinkSeconds -= TotalDt;
+        if (bGrounded && bManualHeld)
+        {
+            LandingLinkSeconds = 0.0f;
+            StartManual();
+        }
+        else if (LandingLinkSeconds <= 0.0f || !bGrounded)
+        {
+            LandingLinkSeconds = 0.0f;
+            BankCombo();
+        }
+    }
+
     // Fast movement is subdivided; a 45 cm single-frame hop across a ramp lip
     // was one cause of the old trace and swept-capsule disagreement.
     const int32 NumSteps = FMath::Max(1, FMath::CeilToInt(TotalDt / (1.0f / 90.0f)));
@@ -357,7 +530,8 @@ void ABMXRiderPawn::Tick(float DeltaSeconds)
     ActualSpeedCmPerSec = FMath::FInterpTo(ActualSpeedCmPerSec, MeasuredSpeed, TotalDt, 8.0f);
     if (!bBailed)
     {
-        UpdateTricks(TotalDt);
+        if (!bGrounded) UpdateAirRotation(TotalDt);
+        UpdateStyleTrick(TotalDt);
         UpdateVisualMotion(TotalDt);
     }
     UpdateCamera(TotalDt);
@@ -391,14 +565,14 @@ void ABMXRiderPawn::MoveBike(float Dt)
     // In the air it is horizontal speed only and pedaling has no effect.
     if (bGrounded) UpdateGroundSpeed(Dt);
 
-    // Vert airs are committed: the auto-180 handles direction instead.
-    if (!bVertAir)
+    // v0.3.0: steering only on the ground. In the air A/D spin the rider
+    // instead (see UpdateAirRotation); the landing carries the new heading.
+    if (bGrounded)
     {
         const float TurningStrength = FMath::Clamp(FMath::Abs(SpeedCmPerSec) / 450.0f, 0.18f, 1.0f);
         const float DirectionSign = SpeedCmPerSec >= 0.0f ? 1.0f : -1.0f;
         AddActorWorldRotation(FRotator(0.0f,
-            SteeringInput * SteeringRateDeg * Dt * TurningStrength * DirectionSign *
-            (bGrounded ? 1.0f : 0.35f), 0.0f));
+            SteeringInput * SteeringRateDeg * Dt * TurningStrength * DirectionSign, 0.0f));
     }
 
     const FVector Start = GetActorLocation();
@@ -457,6 +631,7 @@ void ABMXRiderPawn::MoveBike(float Dt)
         // This is the critical v0.1.8 change: use both wheel contacts at the
         // *next* position, rather than a single ray through the Pawn's centre.
         const FBMXRidingSupport NextSupport = ProbeSupport(Start + HorizontalStep);
+        if (NextSupport.HasContact()) bOnQuarterPipe = NextSupport.OnQuarterPipe();
         // v0.1.9: A quarter-pipe has an OPEN lip, NOT a level deck.
         // In v0.1.8 the old launch condition almost never fired here:
         // the front wheel disappeared beyond the lip while the rear wheel
@@ -655,18 +830,9 @@ void ABMXRiderPawn::MoveBike(float Dt)
         FHitResult LandHit;
         SetActorLocation(FVector(EndPosition.X, EndPosition.Y, LandingZ), true, &LandHit);
         float LandedPitch = LandingSupport.SurfacePitchDegrees();
-        if (bVertAir)
-        {
-            // Complete the 180: the actor now faces down the ramp. The wheel
-            // probes are symmetric (+/-63 cm), so the measured surface is the
-            // same; only its pitch sign and the travel direction flip.
-            AddActorWorldRotation(FRotator(0.0f, 180.0f, 0.0f));
-            SpeedCmPerSec = -SpeedCmPerSec;
-            LandedPitch = -LandedPitch;
-            bVertAir = false;
-            VertAirYawDeg = 0.0f;
-            CameraIdleSeconds = 10.0f; // let the camera swing round behind the rider
-        }
+        // Checks rotation, turns the bike round for vert airs / 180s and
+        // scores flips and spins. A bad landing has already bailed.
+        if (!ResolveLanding(LandedPitch)) return;
         // Keep momentum: project the air velocity onto the landing slope.
         // Coming down a ramp face turns the fall into forward speed, so a
         // vert air drops back in with pace instead of from a standstill.
@@ -681,10 +847,7 @@ void ABMXRiderPawn::MoveBike(float Dt)
         LeftSurfaceSeconds = 0.0f;
         FloorPitchDeg = FMath::Clamp(LandedPitch, -62.0f, 62.0f);
         LandingCooldown = 0.13f;
-        if (bHasActiveTrick || !TrickQueue.IsEmpty())
-            Bail(TEXT("INCOMPLETE TRICK - COMBO LOST"));
-        else
-            BankCombo();
+        AfterCleanLanding();
         return;
     }
 
@@ -699,23 +862,15 @@ void ABMXRiderPawn::MoveBike(float Dt)
             FMath::Abs(EndPosition.Z - LandingZ) < 32.0f)
         {
             SetActorLocation(FVector(EndPosition.X, EndPosition.Y, LandingZ), false);
-            if (bVertAir)
-            {
-                AddActorWorldRotation(FRotator(0.0f, 180.0f, 0.0f));
-                SpeedCmPerSec = -SpeedCmPerSec;
-                bVertAir = false;
-                VertAirYawDeg = 0.0f;
-            }
+            float RecoveryPitch = 0.0f;
+            if (!ResolveLanding(RecoveryPitch)) return;
             FloorPitchDeg = 0.0f;
             bGrounded = true;
             VerticalSpeed = 0.0f;
             StuckAirSeconds = 0.0f;
             AirTime = 0.0f;
             LandingCooldown = 0.13f;
-            if (bHasActiveTrick || !TrickQueue.IsEmpty())
-                Bail(TEXT("INCOMPLETE TRICK - COMBO LOST"));
-            else
-                BankCombo();
+            AfterCleanLanding();
             return;
         }
         Bail(TEXT("PHYSICS RECOVERY - RESPAWNING"));
@@ -728,9 +883,11 @@ void ABMXRiderPawn::UpdateGroundSpeed(float Dt)
 {
     constexpr float Gravity = 980.0f;
     const float PitchRad = FMath::DegreesToRadians(FloorPitchDeg);
-    if (ThrottleInput > 0.02f)
+    // In a manual W/S balance the bike instead of pedaling: you coast.
+    const float Throttle = bInManual ? 0.0f : ThrottleInput;
+    if (Throttle > 0.02f)
     {
-        const float Target = MaxForwardSpeed * ThrottleInput;
+        const float Target = MaxForwardSpeed * Throttle;
         if (SpeedCmPerSec < Target)
         {
             // Pedaling uphill is weaker, so a quarter-pipe has to be hit with
@@ -746,9 +903,9 @@ void ABMXRiderPawn::UpdateGroundSpeed(float Dt)
             SpeedCmPerSec = FMath::FInterpConstantTo(SpeedCmPerSec, Target, Dt, CoastDrag);
         }
     }
-    else if (ThrottleInput < -0.02f)
+    else if (Throttle < -0.02f)
     {
-        SpeedCmPerSec = FMath::FInterpConstantTo(SpeedCmPerSec, ReverseSpeed * ThrottleInput, Dt, Acceleration);
+        SpeedCmPerSec = FMath::FInterpConstantTo(SpeedCmPerSec, ReverseSpeed * Throttle, Dt, Acceleration);
     }
     else
     {
@@ -771,10 +928,19 @@ void ABMXRiderPawn::LaunchIntoAir(float ExtraUpSpeed, float MinUpSpeed)
     constexpr float Gravity = 980.0f;
     const float PitchRad = FMath::DegreesToRadians(FloorPitchDeg);
     const float AlongSurface = SpeedCmPerSec;
-    const bool bVert = FloorPitchDeg >= VertLaunchPitchDeg && AlongSurface > 0.0f;
+    // v0.3.0: only quarter-pipes give vert airs. Steep dirt lips and the
+    // tabletop launch you forward instead.
+    const bool bVert = bOnQuarterPipe && FloorPitchDeg >= VertLaunchPitchDeg && AlongSurface > 0.0f;
 
     bGrounded = false;
     AirTime = 0.0f;
+    bHopCharging = false;
+    FlipAngleDeg = 0.0f;
+    SpinAngleDeg = 0.0f;
+    FlipVelocityDeg = 0.0f;
+    SpinVelocityDeg = 0.0f;
+    bStickFlipArmed = false;
+    bStickSpinArmed = false;
     bFrontWheelContact = false;
     bRearWheelContact = false;
 
@@ -806,87 +972,322 @@ void ABMXRiderPawn::LaunchIntoAir(float ExtraUpSpeed, float MinUpSpeed)
         ShowStatus(TEXT("RAMP LIP - AIRBORNE"), 0.75f);
 }
 
-void ABMXRiderPawn::Hop()
+// ---------------------------------------------------------------------------
+// Bunny hop: hold Space to load up, release to pop. Works from manuals too.
+// ---------------------------------------------------------------------------
+void ABMXRiderPawn::HopPressed()
 {
     if (bBailed || !bGrounded) return;
+    bHopCharging = true;
+    HopCharge = 0.0f;
+}
+
+void ABMXRiderPawn::HopReleased()
+{
+    if (!bHopCharging) return;
+    bHopCharging = false;
+    if (bBailed || !bGrounded) return;
+    const float Charge = FMath::Clamp(HopCharge / FMath::Max(0.05f, HopChargeSeconds), 0.0f, 1.0f);
+    DoHop(FMath::Lerp(MinHopScale, MaxHopScale, Charge));
+}
+
+void ABMXRiderPawn::DoHop(float Power)
+{
     // A hop on a slope keeps the slope's momentum (and can start a vert air
     // near the top of a quarter-pipe).
-    LaunchIntoAir(HopSpeed + FMath::Clamp(FMath::Abs(SpeedCmPerSec)*0.055f,0.0f,65.0f),
-                  HopSpeed * 0.6f);
+    LaunchIntoAir(HopSpeed * Power + FMath::Clamp(FMath::Abs(SpeedCmPerSec)*0.055f,0.0f,65.0f),
+                  HopSpeed * 0.6f * Power);
     JumpGrace = 0.22f;
     if (!bVertAir) FloorPitchDeg *= 0.5f;
 }
 
-void ABMXRiderPawn::AddTrick(const TCHAR* Label, EBMXTrickType Type,
-                              int32 Points, float Duration, float Rotation)
+// ---------------------------------------------------------------------------
+// Manuals: hold Shift on the ground. W/S keep your balance; too far back
+// loops out, too far forward drops the nose. A manual keeps the combo alive
+// between landings; letting go (or stalling) banks it.
+// ---------------------------------------------------------------------------
+void ABMXRiderPawn::ManualPressed()
 {
-    if (bGrounded || bBailed) return;
-    if (CompletedComboTricks.Num() + TrickQueue.Num() + (bHasActiveTrick ? 1 : 0) >= 6) return;
-    FBMXTrick NewTrick;
-    NewTrick.Name = Label;
-    NewTrick.Type = Type;
-    NewTrick.Points = Points;
-    NewTrick.Duration = Duration;
-    NewTrick.Rotation = Rotation;
-    TrickQueue.Add(NewTrick);
-    if (!bHasActiveTrick) BeginNextTrick();
-}
-void ABMXRiderPawn::Barspin() { AddTrick(TEXT("BARSPIN"), EBMXTrickType::Barspin, 150, 0.46f); }
-void ABMXRiderPawn::Tailwhip() { AddTrick(TEXT("TAILWHIP"), EBMXTrickType::Tailwhip, 260, 0.64f); }
-void ABMXRiderPawn::SpinLeft() { AddTrick(TEXT("360 LEFT"), EBMXTrickType::YawSpin, 210, 0.69f, -360.0f); }
-void ABMXRiderPawn::SpinRight() { AddTrick(TEXT("360 RIGHT"), EBMXTrickType::YawSpin, 210, 0.69f, 360.0f); }
-void ABMXRiderPawn::Backflip() { AddTrick(TEXT("BACKFLIP"), EBMXTrickType::Flip, 410, 0.83f, -360.0f); }
-void ABMXRiderPawn::Frontflip() { AddTrick(TEXT("FRONTFLIP"), EBMXTrickType::Flip, 450, 0.83f, 360.0f); }
-
-void ABMXRiderPawn::BeginNextTrick()
-{
-    bHasActiveTrick = false;
-    if (TrickQueue.IsEmpty()) return;
-    ActiveTrick = TrickQueue[0];
-    TrickQueue.RemoveAt(0);
-    bHasActiveTrick = true;
-    ShowStatus(ActiveTrick.Name, 0.85f);
+    bManualHeld = true;
+    if (bGrounded && !bBailed && !bInManual) StartManual();
 }
 
-void ABMXRiderPawn::UpdateTricks(float Dt)
+void ABMXRiderPawn::ManualReleased()
 {
-    if (!bHasActiveTrick)
+    bManualHeld = false;
+}
+
+void ABMXRiderPawn::StartManual()
+{
+    if (bInManual || !bGrounded || bBailed || FMath::Abs(SpeedCmPerSec) < 120.0f) return;
+    bInManual = true;
+    ManualSeconds = 0.0f;
+    ManualBalance = 0.12f;
+    LandingLinkSeconds = 0.0f;
+    AddComboTrick(TEXT("MANUAL"), 50);
+}
+
+void ABMXRiderPawn::EndManual(bool bBank)
+{
+    if (!bInManual) return;
+    bInManual = false;
+    if (bBank) BankCombo();
+}
+
+void ABMXRiderPawn::UpdateManual(float Dt)
+{
+    if (bInManual)
     {
-        ResetVisuals();
+        if (!bGrounded || bBailed)
+        {
+            // Hopped out of the manual: the combo carries into the air.
+            bInManual = false;
+        }
+        else
+        {
+            ManualSeconds += Dt;
+            // Self-amplifying tilt plus a little wobble; W pushes the nose
+            // down, S pulls it back.
+            const float Wobble = 0.35f * FMath::Sin(ManualSeconds * 2.7f) +
+                                 0.20f * FMath::Sin(ManualSeconds * 5.3f + 1.3f);
+            ManualBalance += (ManualBalance * 1.4f + Wobble * 0.8f - ThrottleInput * 2.2f) * Dt;
+            ManualPointAccum += ManualPointsPerSecond * Dt;
+            const int32 Whole = FMath::FloorToInt(ManualPointAccum);
+            UnbankedPoints += Whole;
+            ManualPointAccum -= float(Whole);
+            if (ManualBalance > 1.0f)
+            {
+                Bail(TEXT("LOOPED OUT"));
+            }
+            else if (ManualBalance < -1.0f)
+            {
+                Bail(TEXT("NOSE DOWN - MANUAL LOST"));
+            }
+            else if (!bManualHeld || FMath::Abs(SpeedCmPerSec) < 80.0f)
+            {
+                EndManual(true);
+            }
+        }
+    }
+    ManualAlpha = FMath::FInterpTo(ManualAlpha, bInManual ? 1.0f : 0.0f, Dt, 10.0f);
+}
+
+// ---------------------------------------------------------------------------
+// Air rotation: flips on W/S (or F/G), spins on A/D (or Q/E). Rotation
+// eases in and out, and when you let go near a full turn it settles onto it,
+// so landings stay readable without being automatic.
+// ---------------------------------------------------------------------------
+void ABMXRiderPawn::UpdateAirRotation(float Dt)
+{
+    if (FMath::Abs(ThrottleInput) < 0.2f) bStickFlipArmed = true;
+    if (FMath::Abs(SteeringInput) < 0.2f) bStickSpinArmed = true;
+    // W (throttle +) leans forward = frontflip (nose down = negative pitch).
+    const float FlipIn = FMath::Clamp(FlipAxisInput - (bStickFlipArmed ? ThrottleInput : 0.0f), -1.0f, 1.0f);
+    const float SpinIn = FMath::Clamp(SpinAxisInput + (bStickSpinArmed ? SteeringInput : 0.0f), -1.0f, 1.0f);
+
+    auto Drive = [Dt](float Input, float Rate, float Angle, float Snap, float& Velocity)
+    {
+        if (FMath::Abs(Input) > 0.1f)
+        {
+            Velocity = FMath::FInterpTo(Velocity, Input * Rate, Dt, 9.0f);
+        }
+        else
+        {
+            // Settle toward the nearest whole rotation if close, else coast down.
+            const float Nearest = FMath::RoundToFloat(Angle / Snap) * Snap;
+            const float Residual = Angle - Nearest;
+            const float Target = FMath::Abs(Residual) < 70.0f ? -Residual * 5.0f : Velocity * 0.6f;
+            Velocity = FMath::FInterpTo(Velocity, Target, Dt, 6.0f);
+        }
+        return Angle + Velocity * Dt;
+    };
+    FlipAngleDeg = Drive(FlipIn, FlipRateDeg, FlipAngleDeg, 360.0f, FlipVelocityDeg);
+    SpinAngleDeg = Drive(SpinIn, SpinRateDeg, SpinAngleDeg, 180.0f, SpinVelocityDeg);
+}
+
+// ---------------------------------------------------------------------------
+// Style tricks (barspin, tailwhip, no-hander, superman...). One at a time,
+// layered on top of any flip/spin.
+// ---------------------------------------------------------------------------
+void ABMXRiderPawn::StylePressed(EBMXStyleTrick Trick)
+{
+    if (bBailed || bGrounded || Trick == EBMXStyleTrick::None) return;
+    if (ActiveStyle != EBMXStyleTrick::None)
+    {
+        const BMXStyle::FDef Current = BMXStyle::Get(ActiveStyle);
+        // A timed trick must finish; pressing the same hold trick is a no-op.
+        if (Current.bTimed || ActiveStyle == Trick) return;
+        // Switching hold tricks mid-air: the old one ends (scored if held long enough).
+        if (!bStyleScored && StyleElapsed >= Current.Seconds)
+            AddComboTrick(Current.Name, Current.Points);
+    }
+    ActiveStyle = Trick;
+    PoseStyle = BMXStyle::Get(Trick).bTimed ? EBMXStyleTrick::None : Trick;
+    StyleElapsed = 0.0f;
+    StyleHoldPointAccum = 0.0f;
+    bStyleHeld = true;
+    bStyleScored = false;
+    // Snap the blend so a switch reads as a new pose, not a morph.
+    if (!BMXStyle::Get(Trick).bTimed) StylePoseAlpha = FMath::Min(StylePoseAlpha, 0.3f);
+    ShowStatus(BMXStyle::Get(Trick).Name, 0.8f);
+}
+
+void ABMXRiderPawn::StyleReleased(EBMXStyleTrick Trick)
+{
+    if (ActiveStyle == Trick) bStyleHeld = false;
+}
+
+void ABMXRiderPawn::UpdateStyleTrick(float Dt)
+{
+    if (ActiveStyle == EBMXStyleTrick::None)
+    {
+        StylePoseAlpha = FMath::FInterpConstantTo(StylePoseAlpha, 0.0f, Dt, 7.0f);
+        if (StylePoseAlpha <= 0.0f) PoseStyle = EBMXStyleTrick::None;
         return;
     }
-    ActiveTrick.Elapsed = FMath::Min(ActiveTrick.Elapsed + Dt, ActiveTrick.Duration);
-    const float Progress = FMath::Clamp(ActiveTrick.Elapsed / FMath::Max(ActiveTrick.Duration,0.001f),0.0f,1.0f);
-    const float Angle = ActiveTrick.Rotation * FMath::InterpEaseInOut(0.0f,1.0f,Progress,1.4f);
-    switch (ActiveTrick.Type)
+    const BMXStyle::FDef Def = BMXStyle::Get(ActiveStyle);
+    StyleElapsed += Dt;
+    if (Def.bTimed)
     {
-        case EBMXTrickType::Barspin:  HandlePivot->SetRelativeRotation(FRotator(0,Angle,0)); break;
-        case EBMXTrickType::Tailwhip: BikeBodyPivot->SetRelativeRotation(FRotator(0,Angle,0)); break;
-        case EBMXTrickType::YawSpin:  TrickPivot->SetRelativeRotation(FRotator(0,Angle,0)); break;
-        case EBMXTrickType::Flip:     TrickPivot->SetRelativeRotation(FRotator(FloorPitchDeg+Angle,0,0)); break;
-        default: break;
-    }
-    if (Progress >= 1.0f)
-    {
-        // Repeating a trick inside one combo is worth less each time
-        // (100%, 50%, 25%...), rewarding variety like classic BMX games.
-        int32 Repeats = 0;
-        for (const FString& Done : CompletedComboTricks)
+        if (StyleElapsed >= Def.Seconds)
         {
-            if (Done == ActiveTrick.Name) ++Repeats;
+            AddComboTrick(Def.Name, Def.Points);
+            ActiveStyle = EBMXStyleTrick::None;
         }
-        UnbankedPoints += FMath::Max(10, ActiveTrick.Points >> FMath::Min(Repeats, 4));
-        CompletedComboTricks.Add(ActiveTrick.Name);
-        ResetVisuals();
-        BeginNextTrick();
+        return;
+    }
+    StylePoseAlpha = FMath::FInterpConstantTo(StylePoseAlpha, 1.0f, Dt, 8.0f);
+    if (!bStyleScored && StyleElapsed >= Def.Seconds)
+    {
+        AddComboTrick(Def.Name, Def.Points);
+        bStyleScored = true;
+    }
+    if (bStyleScored && bStyleHeld)
+    {
+        // Holding a pose longer keeps adding points.
+        StyleHoldPointAccum += Def.Points * 0.6f * Dt;
+        const int32 Whole = FMath::FloorToInt(StyleHoldPointAccum);
+        UnbankedPoints += Whole;
+        StyleHoldPointAccum -= float(Whole);
+    }
+    // Released: the pose ends once its minimum hold is done.
+    if (!bStyleHeld && StyleElapsed >= Def.Seconds)
+    {
+        ActiveStyle = EBMXStyleTrick::None;
+    }
+}
+
+void ABMXRiderPawn::AddComboTrick(const FString& Name, int32 Points)
+{
+    // Repeating a trick inside one combo is worth less each time
+    // (100%, 50%, 25%...), rewarding variety like classic BMX games.
+    int32 Repeats = 0;
+    for (const FString& Done : CompletedComboTricks)
+    {
+        if (Done == Name) ++Repeats;
+    }
+    UnbankedPoints += FMath::Max(10, Points >> FMath::Min(Repeats, 4));
+    CompletedComboTricks.Add(Name);
+}
+
+// ---------------------------------------------------------------------------
+// Landing: checks flips are near a whole turn and spins near a half turn,
+// turns the bike for vert airs / 180s (landing fakie), and scores rotations.
+// ---------------------------------------------------------------------------
+bool ABMXRiderPawn::ResolveLanding(float& InOutLandedPitch)
+{
+    const float VertYaw = bVertAir ? 180.0f : 0.0f;
+    bVertAir = false;
+    VertAirYawDeg = 0.0f;
+
+    const float FlipTurns = FMath::RoundToFloat(FlipAngleDeg / 360.0f);
+    const float FlipResidual = FlipAngleDeg - FlipTurns * 360.0f;
+    const float TotalYaw = VertYaw + SpinAngleDeg;
+    const float HalfTurns = FMath::RoundToFloat(TotalYaw / 180.0f);
+    const float YawResidual = TotalYaw - HalfTurns * 180.0f;
+    const int32 Flips = FMath::RoundToInt(FlipTurns);
+    const int32 SpinHalfTurns = FMath::RoundToInt(SpinAngleDeg / 180.0f);
+
+    // An odd number of half turns means the bike now points the other way.
+    if (FMath::Abs(FMath::RoundToInt(HalfTurns)) % 2 == 1)
+    {
+        AddActorWorldRotation(FRotator(0.0f, 180.0f, 0.0f));
+        SpeedCmPerSec = -SpeedCmPerSec;
+        InOutLandedPitch = -InOutLandedPitch;
+        CameraIdleSeconds = 10.0f; // let the camera swing round behind the rider
+    }
+    // A slightly-off spin carries into the new heading instead of snapping.
+    AddActorWorldRotation(FRotator(0.0f, YawResidual, 0.0f));
+
+    FlipAngleDeg = 0.0f;
+    SpinAngleDeg = 0.0f;
+    FlipVelocityDeg = 0.0f;
+    SpinVelocityDeg = 0.0f;
+
+    if (FMath::Abs(FlipResidual) > LandingToleranceDeg)
+    {
+        Bail(FlipResidual > 0.0f ? TEXT("OVER-ROTATED - BAIL") : TEXT("UNDER-ROTATED - BAIL"));
+        return false;
+    }
+    if (FMath::Abs(YawResidual) > LandingToleranceDeg)
+    {
+        Bail(TEXT("LANDED SIDEWAYS - BAIL"));
+        return false;
+    }
+    if (ActiveStyle != EBMXStyleTrick::None && BMXStyle::Get(ActiveStyle).bTimed)
+    {
+        Bail(TEXT("INCOMPLETE TRICK - BAIL"));
+        return false;
+    }
+    if (ActiveStyle != EBMXStyleTrick::None || StylePoseAlpha > 0.5f)
+    {
+        Bail(TEXT("TIED UP - LET GO BEFORE LANDING"));
+        return false;
+    }
+
+    if (Flips != 0)
+    {
+        const bool bBack = Flips > 0;
+        const int32 Count = FMath::Abs(Flips);
+        const TCHAR* Prefix = Count == 1 ? TEXT("") : (Count == 2 ? TEXT("DOUBLE ") : TEXT("TRIPLE "));
+        const int32 Base = bBack ? 450 : 500;
+        AddComboTrick(FString::Printf(TEXT("%s%s"), Prefix, bBack ? TEXT("BACKFLIP") : TEXT("FRONTFLIP")),
+                      Base * Count + (Count > 1 ? Base * (Count - 1) / 2 : 0));
+    }
+    if (SpinHalfTurns != 0)
+    {
+        const int32 Degrees = FMath::Abs(SpinHalfTurns) * 180;
+        AddComboTrick(FString::Printf(TEXT("%d"), Degrees), Degrees / 2);
+    }
+    return true;
+}
+
+void ABMXRiderPawn::AfterCleanLanding()
+{
+    ActiveStyle = EBMXStyleTrick::None;
+    if (bManualHeld)
+    {
+        // Landing straight into a manual keeps the combo going.
+        StartManual();
+        if (bInManual) return;
+    }
+    if (!CompletedComboTricks.IsEmpty())
+    {
+        // Short window to catch a manual before the combo banks.
+        LandingLinkSeconds = 0.3f;
     }
 }
 
 void ABMXRiderPawn::ResetVisuals()
 {
-    TrickPivot->SetRelativeRotation(FRotator(FloorPitchDeg,0,0));
-    BikeBodyPivot->SetRelativeRotation(FRotator::ZeroRotator);
+    TrickPivot->SetRelativeLocationAndRotation(FVector(0.0f, 0.0f, 55.0f), FRotator(FloorPitchDeg,0,0));
+    BikeBodyPivot->SetRelativeLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
     HandlePivot->SetRelativeRotation(FRotator::ZeroRotator);
+    RiderUpperPivot->SetRelativeRotation(FRotator::ZeroRotator);
+    LeftArmPivot->SetRelativeRotation(FRotator::ZeroRotator);
+    RightArmPivot->SetRelativeRotation(FRotator::ZeroRotator);
+    LeftLegPivot->SetRelativeRotation(FRotator::ZeroRotator);
+    RightLegPivot->SetRelativeRotation(FRotator::ZeroRotator);
 }
 
 float ABMXRiderPawn::GetComboMultiplier() const
@@ -908,8 +1309,8 @@ void ABMXRiderPawn::BankCombo()
     TotalScore += Award;
     ShowStatus(FString::Printf(TEXT("LANDED! +%d POINTS"),Award), 2.3f);
     CompletedComboTricks.Reset();
-    TrickQueue.Reset();
     UnbankedPoints = 0;
+    LandingLinkSeconds = 0.0f;
 }
 void ABMXRiderPawn::Bail(const FString& Reason)
 {
@@ -921,8 +1322,17 @@ void ABMXRiderPawn::Bail(const FString& Reason)
     VerticalSpeed = 0.0f;
     bVertAir = false;
     VertAirYawDeg = 0.0f;
-    bHasActiveTrick = false;
-    TrickQueue.Reset();
+    ActiveStyle = EBMXStyleTrick::None;
+    PoseStyle = EBMXStyleTrick::None;
+    StylePoseAlpha = 0.0f;
+    bInManual = false;
+    ManualAlpha = 0.0f;
+    bHopCharging = false;
+    LandingLinkSeconds = 0.0f;
+    FlipAngleDeg = 0.0f;
+    SpinAngleDeg = 0.0f;
+    FlipVelocityDeg = 0.0f;
+    SpinVelocityDeg = 0.0f;
     CompletedComboTricks.Reset();
     UnbankedPoints = 0;
     ResetVisuals();
@@ -957,12 +1367,40 @@ void ABMXRiderPawn::ResetBike()
     WheelRotationDeg = 0.0f;
     PedalPhase = 0.0f;
     CompletedComboTricks.Reset();
-    TrickQueue.Reset();
-    bHasActiveTrick = false;
     UnbankedPoints = 0;
+    ActiveStyle = EBMXStyleTrick::None;
+    PoseStyle = EBMXStyleTrick::None;
+    StylePoseAlpha = 0.0f;
+    StyleElapsed = 0.0f;
+    bInManual = false;
+    ManualAlpha = 0.0f;
+    ManualBalance = 0.0f;
+    bHopCharging = false;
+    HopCharge = 0.0f;
+    LandingLinkSeconds = 0.0f;
+    FlipAngleDeg = 0.0f;
+    SpinAngleDeg = 0.0f;
+    FlipVelocityDeg = 0.0f;
+    SpinVelocityDeg = 0.0f;
+    bOnQuarterPipe = false;
     SetActorLocationAndRotation(ResetLocation, ResetRotation, false, nullptr, ETeleportType::TeleportPhysics);
     ResetVisuals();
     RecenterCamera();
+}
+// Key 2: respawn at the start of the dirt jump line (and keep respawning
+// there after bails). Key 1: back to the park start.
+void ABMXRiderPawn::ResetToDirtLine()
+{
+    ResetLocation = FVector(-2880.0f, -2350.0f, 60.0f);
+    ResetRotation = FRotator(0.0f, 0.0f, 0.0f);
+    ResetBike();
+    ShowStatus(TEXT("DIRT LINE  |  ABOUT 40 KM/H CLEARS THE GAPS"), 3.0f);
+}
+void ABMXRiderPawn::ResetToPark()
+{
+    ResetLocation = FVector(-150.0f, -1150.0f, 60.0f);
+    ResetRotation = FRotator(0.0f, 180.0f, 0.0f);
+    ResetBike();
 }
 void ABMXRiderPawn::ShowStatus(const FString& Message, float Seconds)
 {

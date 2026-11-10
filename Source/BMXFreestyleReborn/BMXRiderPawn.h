@@ -12,22 +12,20 @@ class USpringArmComponent;
 class UCameraComponent;
 class UInputComponent;
 
-enum class EBMXTrickType : uint8 { None, Barspin, Tailwhip, YawSpin, Flip };
-
-struct FBMXTrick
+// v0.3.0: Bike/body "style" tricks. They layer on top of free flip/spin
+// rotation, so e.g. a backflip + tailwhip or a 360 + superman both work.
+// Timed tricks (barspin, tailwhip) play once; hold tricks (no-hander,
+// superman...) last while the button is held and score more the longer.
+enum class EBMXStyleTrick : uint8
 {
-    FString Name;
-    EBMXTrickType Type = EBMXTrickType::None;
-    int32 Points = 0;
-    float Duration = 0.0f;
-    float Elapsed = 0.0f;
-    float Rotation = 0.0f;
+    None, Barspin, Tailwhip, NoHander, Superman, CanCan, XUp, Turndown, Tabletop, Nothing, TuckNoHander
 };
 
 // Non-reflected runtime contact data, intentionally outside the reflected UCLASS.
 struct FBMXWheelContact
 {
     bool bSupported = false;
+    bool bQuarterPipe = false; // surface tagged BMX_QUARTER (vert airs allowed)
     float FloorZ = 0.0f;
     FVector Normal = FVector::UpVector;
 };
@@ -36,6 +34,10 @@ struct FBMXRidingSupport
     FBMXWheelContact Front;
     FBMXWheelContact Rear;
     bool HasContact() const { return Front.bSupported || Rear.bSupported; }
+    bool OnQuarterPipe() const
+    {
+        return (Front.bSupported && Front.bQuarterPipe) || (Rear.bSupported && Rear.bQuarterPipe);
+    }
     float AverageFloorZ() const
     {
         if (Front.bSupported && Rear.bSupported)
@@ -80,6 +82,11 @@ public:
     FString GetComboNames() const;
     FString GetStatusMessage() const { return StatusMessage; }
     bool IsVertAir() const { return bVertAir; }
+    bool IsInManual() const { return bInManual; }
+    float GetManualBalance() const { return ManualBalance; }
+    bool IsRidingFakie() const { return bGrounded && SpeedCmPerSec < -40.0f; }
+    float GetFlipAngle() const { return FlipAngleDeg; }
+    float GetSpinAngle() const { return SpinAngleDeg; }
     bool IsDebugHUDVisible() const { return bShowDebugHUD; }
 
 private:
@@ -101,6 +108,14 @@ private:
     TObjectPtr<USceneComponent> LeftLegPivot;
     UPROPERTY(VisibleAnywhere, Category="BMX|Visuals")
     TObjectPtr<USceneComponent> RightLegPivot;
+    // v0.3.0: torso/head/arms pivot at the hips, and shoulder pivots, so
+    // poses like superman and no-hander can move the upper body.
+    UPROPERTY(VisibleAnywhere, Category="BMX|Visuals")
+    TObjectPtr<USceneComponent> RiderUpperPivot;
+    UPROPERTY(VisibleAnywhere, Category="BMX|Visuals")
+    TObjectPtr<USceneComponent> LeftArmPivot;
+    UPROPERTY(VisibleAnywhere, Category="BMX|Visuals")
+    TObjectPtr<USceneComponent> RightArmPivot;
     UPROPERTY(VisibleAnywhere, Category="BMX|Camera")
     TObjectPtr<USpringArmComponent> CameraBoom;
     UPROPERTY(VisibleAnywhere, Category="BMX|Camera")
@@ -126,10 +141,17 @@ private:
     // become vert airs that turn the rider back into the ramp.
     void LaunchIntoAir(float ExtraUpSpeed, float MinUpSpeed);
     void UpdateCamera(float Dt);
-    void UpdateTricks(float Dt);
+    void UpdateAirRotation(float Dt);
+    void UpdateStyleTrick(float Dt);
+    void UpdateManual(float Dt);
+    // Scores rotations, checks the landing is clean and turns the actor
+    // round for 180s / vert airs. Returns false after calling Bail().
+    bool ResolveLanding(float& InOutLandedPitch);
+    void AfterCleanLanding();
+    void StartManual();
+    void EndManual(bool bBank);
+    void AddComboTrick(const FString& Name, int32 Points);
     void ResetVisuals();
-    void AddTrick(const TCHAR* Label, EBMXTrickType Type, int32 Points, float Duration, float Rotation = 360.0f);
-    void BeginNextTrick();
     void BankCombo();
     void Bail(const FString& Reason);
     void ResetBike();
@@ -139,13 +161,17 @@ private:
     void SetSteering(float Value);
     void OrbitYaw(float Value);
     void OrbitPitch(float Value);
-    void Hop();
-    void Barspin();
-    void Tailwhip();
-    void SpinLeft();
-    void SpinRight();
-    void Backflip();
-    void Frontflip();
+    void HopPressed();
+    void HopReleased();
+    void DoHop(float Power);
+    void ManualPressed();
+    void ManualReleased();
+    void SetFlipAxis(float Value);
+    void SetSpinAxis(float Value);
+    void StylePressed(EBMXStyleTrick Trick);
+    void StyleReleased(EBMXStyleTrick Trick);
+    void ResetToDirtLine();
+    void ResetToPark();
     void RecenterCamera();
     void ToggleDebugHUD();
 
@@ -181,6 +207,23 @@ private:
     // so both wheels come down on the transition instead of the coping.
     UPROPERTY(EditAnywhere, Category="BMX|Vert")
     float VertDriftCm = 60.0f;
+    // Air rotation speeds (deg/s) for flips (W/S, F/G) and spins (A/D, Q/E).
+    UPROPERTY(EditAnywhere, Category="BMX|Tricks")
+    float FlipRateDeg = 430.0f;
+    UPROPERTY(EditAnywhere, Category="BMX|Tricks")
+    float SpinRateDeg = 540.0f;
+    // How far off a full rotation you can land and still ride away.
+    UPROPERTY(EditAnywhere, Category="BMX|Tricks")
+    float LandingToleranceDeg = 50.0f;
+    UPROPERTY(EditAnywhere, Category="BMX|Tricks")
+    float ManualPointsPerSecond = 60.0f;
+    // Holding Space charges the bunny hop: a tap = MinHopScale, full charge = MaxHopScale.
+    UPROPERTY(EditAnywhere, Category="BMX|Tricks")
+    float HopChargeSeconds = 0.35f;
+    UPROPERTY(EditAnywhere, Category="BMX|Tricks")
+    float MinHopScale = 0.9f;
+    UPROPERTY(EditAnywhere, Category="BMX|Tricks")
+    float MaxHopScale = 1.3f;
 
     float ThrottleInput = 0.0f;
     float SteeringInput = 0.0f;
@@ -213,15 +256,47 @@ private:
     float VertAirYawDeg = 0.0f;
     float VertAirLaunchPitchDeg = 0.0f;
     bool bShowDebugHUD = true;
+    bool bOnQuarterPipe = false;
+
+    // Air rotation (v0.3.0). Positive flip = nose up (backflip); positive spin = right.
+    float FlipAxisInput = 0.0f;
+    float SpinAxisInput = 0.0f;
+    float FlipAngleDeg = 0.0f;
+    float SpinAngleDeg = 0.0f;
+    float FlipVelocityDeg = 0.0f;
+    float SpinVelocityDeg = 0.0f;
+    // W/S and A/D only start rotating once released after takeoff, so holding
+    // W to pedal into a jump doesn't throw an accidental frontflip.
+    bool bStickFlipArmed = false;
+    bool bStickSpinArmed = false;
+
+    // Style tricks.
+    EBMXStyleTrick ActiveStyle = EBMXStyleTrick::None;
+    EBMXStyleTrick PoseStyle = EBMXStyleTrick::None;
+    float StyleElapsed = 0.0f;
+    float StylePoseAlpha = 0.0f;
+    float StyleHoldPointAccum = 0.0f;
+    bool bStyleHeld = false;
+    bool bStyleScored = false;
+
+    // Manuals and combo linking.
+    bool bManualHeld = false;
+    bool bInManual = false;
+    float ManualBalance = 0.0f;
+    float ManualSeconds = 0.0f;
+    float ManualAlpha = 0.0f;
+    float ManualPointAccum = 0.0f;
+    float LandingLinkSeconds = 0.0f;
+
+    // Charged bunny hop.
+    bool bHopCharging = false;
+    float HopCharge = 0.0f;
     FVector ResetLocation = FVector(-150.0f, -1150.0f, 60.0f);
     FRotator ResetRotation = FRotator(0.0f, 180.0f, 0.0f);
 
     int32 TotalScore = 0;
     int32 UnbankedPoints = 0;
     TArray<FString> CompletedComboTricks;
-    TArray<FBMXTrick> TrickQueue;
-    FBMXTrick ActiveTrick;
-    bool bHasActiveTrick = false;
     FString StatusMessage;
     float StatusSeconds = 0.0f;
 };

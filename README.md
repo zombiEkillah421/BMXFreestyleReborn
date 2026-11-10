@@ -3,15 +3,19 @@
 An original arcade BMX freestyle game for Windows PC, built in **Unreal Engine 5.8 (C++)**.
 Inspired by the feel of 2001-era arcade BMX games: responsive riding, big airs, trick combos.
 
-**Current version:** v0.2.0 — early playable prototype (see `Docs/CHANGELOG.md`).
+**Current version:** v0.3.0 — early playable prototype (see `Docs/CHANGELOG.md`).
 
 ## What's in the prototype
 
-- **Training park** generated entirely in C++ at runtime: two big and two small quarter-pipes, a tabletop, a ledge, two rails and perimeter walls. No map or Blueprint assets are needed.
+- **Training park** generated entirely in C++ at runtime: two big and two small quarter-pipes, a tabletop, a ledge, two rails, a **three-set dirt jump line** and perimeter walls. No map or Blueprint assets are needed.
 - **Arcade rider**: pedal, brake/reverse, steer, bunny hop. Two wheel-contact probes follow ramps.
 - **Slope physics**: ramps slow you down going up and speed you up coming down. If you stall on a quarter-pipe, you roll back down backwards (fakie).
 - **Vert airs**: hit a quarter-pipe with speed and you launch straight up, turn 180° in the air and drop back into the ramp.
-- **Tricks**: barspin, tailwhip, 360 left/right, frontflip, backflip. Tricks queue into combos, each extra trick adds +0.35x to the multiplier, and repeated tricks in the same combo score less.
+- **Free air rotation**: flip (W/S) and spin (A/D) however far you like (backflips, frontflips, 180s, 360s, doubles) and combine them with any bike/body trick.
+- **10 style tricks**: barspin, tailwhip, no-hander, superman, can-can, X-up, turndown, tabletop, nothing, tuck no-hander. Hold tricks score more the longer you hold them.
+- **Manuals** link combos between landings, with a balance meter. Land a 180 and you ride away **fakie**.
+- **Charged bunny hop**: hold Space to load up for a bigger pop.
+- **Combos**: each extra trick adds +0.35x to the multiplier, and repeated tricks in the same combo score less.
 - **HUD**: score, combo, and a diagnostic readout for playtesting (toggle it with Tab).
 - **Visuals**: placeholder bike and rider built from engine primitives. Final art comes later.
 
@@ -32,13 +36,19 @@ Inspired by the feel of 2001-era arcade BMX games: responsive riding, big airs, 
 | Pedal / brake-reverse | W / S | Left stick |
 | Steer | A / D | Left stick |
 | Camera | Mouse | Right stick |
-| Bunny hop | Space | A |
+| Bunny hop (hold to charge) | Space | A |
+| Manual (hold; W/S balance) | Left Shift | LT |
+| **In the air:** flip / spin | W/S (or F/G) · A/D (or Q/E) | Left stick |
 | Barspin / Tailwhip | B / T | X / Y |
-| 360 left / right | Q / E | LB / RB |
-| Frontflip / Backflip | F / G | D-pad up / down |
+| No-hander / Superman | J / K | LB / RB |
+| Can-can / X-up | L / U | D-pad left / right |
+| Turndown / Tabletop | I / O | D-pad down / up |
+| Nothing / Tuck no-hander | H / N | RT / — |
+| Reset / park start / dirt line | R / 1 / 2 | B / — / — |
 | Recenter camera | C | Right stick click |
-| Reset to start | R | B |
 | Toggle debug HUD | Tab | View / Back |
+
+Stick flips and spins only start once you've let go of W/S or A/D after takeoff, so pedaling into a jump won't throw you into a frontflip. F/G and Q/E work straight away.
 
 ## Code layout
 
@@ -46,18 +56,18 @@ Inspired by the feel of 2001-era arcade BMX games: responsive riding, big airs, 
 | --- | --- |
 | `BMXGameMode` | Spawns park, sky, lighting and the rider |
 | `BMXTrainingPark` | Builds the procedural ramps (visible mesh = collision) and boxes |
-| `BMXRiderPawn` | Riding physics, wheel probes, launches/vert airs, tricks, combos, camera |
+| `BMXRiderPawn` | Riding physics, wheel probes, launches/vert airs, air rotation, style tricks, manuals, combos, camera |
 | `BMXHUD` | Canvas HUD; no UMG assets required |
 | `Config/DefaultInput.ini` | Legacy input mappings (Enhanced Input migration planned) |
 
-Riding and vert-air tuning values are exposed under **BMX|Tuning** and **BMX|Vert** on the rider pawn.
+Tuning values are exposed under **BMX|Tuning**, **BMX|Vert** and **BMX|Tricks** on the rider pawn.
 
 ## Known limitations
 
 - The bike isn't physically simulated. It uses arcade speed plus wheel-ray ground following.
 - Tricks rotate primitive components. There's no skeletal animation yet.
 - Rails are solid obstacles only. There's no grind system yet.
-- No menus, audio, career mode or saving yet.
+- No grinds yet (next on the list), and no menus, audio, career mode or saving.
 
 ## Originality
 

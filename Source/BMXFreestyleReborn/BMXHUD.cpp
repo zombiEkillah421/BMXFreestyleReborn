@@ -20,13 +20,15 @@ void ABMXHUD::DrawHUD()
     const float PanelHeight = bDebug ? 192.0f : 104.0f;
     DrawRect(Dark, 26, 24, 460, PanelHeight);
     DrawRect(Cyan, 26, 24, 6, PanelHeight);
-    DrawText(TEXT("BMX FREESTYLE REBORN  |  PARK 01 - v0.2.0"), White, 46, 34, GEngine->GetSmallFont(), 1.05f, false);
+    DrawText(TEXT("BMX FREESTYLE REBORN  |  PARK 01 - v0.3.0"), White, 46, 34, GEngine->GetSmallFont(), 1.05f, false);
     DrawText(FString::Printf(TEXT("SCORE   %07d"), Rider->GetTotalScore()), Gold, 45, 64, GEngine->GetMediumFont(), 1.35f, false);
     if (bDebug)
     {
         // Diagnostic readout for playtest recordings. TAB / gamepad View toggles it.
         DrawText(FString::Printf(TEXT("SPEED  %02.0f KM/H"), Rider->GetSpeedKmh()), Cyan, 46, 104, GEngine->GetSmallFont(), 1.04f, false);
         const FString MoveState = Rider->IsMovementBlocked() ? TEXT("BLOCKED") :
+            Rider->IsInManual() ? TEXT("MANUAL") :
+            Rider->IsRidingFakie() ? TEXT("FAKIE") :
             Rider->IsGrounded() ? TEXT("GROUND") :
             Rider->IsVertAir() ? TEXT("VERT AIR") : TEXT("AIR");
         DrawText(FString::Printf(TEXT("INPUT W/S %+.1f   |   %s"), Rider->GetPedalInput(), *MoveState),
@@ -49,14 +51,27 @@ void ABMXHUD::DrawHUD()
                  W * 0.5f - 215, H - 210, GEngine->GetMediumFont(), 1.2f, false);
         DrawText(Rider->GetComboNames(), White, W * 0.5f - 215, H - 167, GEngine->GetSmallFont(), 1.05f, false);
     }
+    if (Rider->IsInManual())
+    {
+        // Balance meter: keep the marker in the middle with W / S.
+        const float MeterW = 320.0f;
+        const float MeterX = W * 0.5f - MeterW * 0.5f;
+        const float MeterY = H * 0.62f;
+        const float Balance = FMath::Clamp(Rider->GetManualBalance(), -1.0f, 1.0f);
+        DrawRect(Dark, MeterX - 6, MeterY - 26, MeterW + 12, 50);
+        DrawRect(FLinearColor(0.8f,0.2f,0.15f,0.9f), MeterX, MeterY, MeterW, 10);
+        DrawRect(FLinearColor(0.2f,0.75f,0.35f,0.9f), MeterX + MeterW * 0.3f, MeterY, MeterW * 0.4f, 10);
+        DrawRect(White, MeterX + MeterW * 0.5f * (1.0f + Balance) - 3, MeterY - 6, 6, 22);
+        DrawText(TEXT("MANUAL  -  W NOSE DOWN / S PULL BACK"), White, MeterX, MeterY - 24, GEngine->GetSmallFont(), 0.9f, false);
+    }
     if (!Rider->GetStatusMessage().IsEmpty())
     {
         DrawRect(Dark, W*0.5f - 240, H*0.23f, 480, 46);
         DrawText(Rider->GetStatusMessage(), Cyan, W*0.5f - 215, H*0.23f + 10, GEngine->GetMediumFont(), 1.0f, false);
     }
     DrawRect(Dark, 26, H - 92, W - 52, 67);
-    DrawText(TEXT("W/S PEDAL/BRAKE   A/D STEER   MOUSE CAMERA   SPACE HOP   B BARSPIN   T TAILWHIP"), White,
+    DrawText(TEXT("W/S PEDAL   A/D STEER   HOLD SPACE BIG HOP   SHIFT MANUAL   AIR: W/S FLIP  A/D SPIN   1 PARK  2 DIRT"), White,
              42, H - 81, GEngine->GetSmallFont(), 0.94f, false);
-    DrawText(TEXT("Q/E 360 SPINS    F/G FLIPS    C CAMERA    R RESET    TAB DEBUG    |    HIT QUARTERS FAST FOR VERT AIRS"), Cyan,
+    DrawText(TEXT("B BARSPIN  T TAILWHIP  J NO-HANDER  K SUPERMAN  L CAN-CAN  U X-UP  I TURNDOWN  O TABLETOP  H NOTHING  N TUCK"), Cyan,
              42, H - 52, GEngine->GetSmallFont(), 0.94f, false);
 }

@@ -128,6 +128,8 @@ void ABMXTrainingPark::AddRamp(const FVector& Origin, const FRotator& Rotation,
     Mesh->SetCollisionResponseToAllChannels(ECR_Block);
     Mesh->SetGenerateOverlapEvents(false);
     Mesh->ComponentTags.Add(FName(TEXT("BMX_RAMP")));
+    // Curved ramps are quarter-pipes: the rider may vert-air off them.
+    if (bCurved) Mesh->ComponentTags.Add(FName(TEXT("BMX_QUARTER")));
     Mesh->SetVisibility(true);
     Mesh->SetCastShadow(true);
     Mesh->RegisterComponent();
@@ -220,11 +222,102 @@ void ABMXTrainingPark::AddRamp(const FVector& Origin, const FRotator& Rotation,
         // Do not ignore the park actor: the trace must be able to hit this ramp.
         // Checking the actual hit component avoids mistaking the floor for a ramp.
         const bool bHit = World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility);
-        UE_LOG(LogTemp, Log, TEXT("[BMX PARK v0.2.0] Ramp at %s; triangles=%d; trace=%s; target=%s"),
+        UE_LOG(LogTemp, Log, TEXT("[BMX PARK v0.3.0] Ramp at %s; triangles=%d; trace=%s; target=%s"),
                *Origin.ToString(), Triangles.Num() / 3,
                bHit ? TEXT("HIT") : TEXT("MISS"),
                (bHit && Hit.GetComponent() == Mesh) ? TEXT("RAMP") : TEXT("OTHER"));
     }
+}
+
+void ABMXTrainingPark::AddProfileMound(const FVector& Origin, float Yaw, float Width,
+                                       const TArray<FVector2D>& Profile, UMaterialInterface* Material)
+{
+    if (Profile.Num() < 2) return;
+    UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this);
+    Mesh->SetupAttachment(RootComponent);
+    Mesh->SetRelativeLocation(Origin);
+    Mesh->SetRelativeRotation(FRotator(0.0f, Yaw, 0.0f));
+    Mesh->bUseAsyncCooking = false;
+    Mesh->bUseComplexAsSimpleCollision = true;
+    Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    Mesh->SetCollisionObjectType(ECC_WorldStatic);
+    Mesh->SetCollisionResponseToAllChannels(ECR_Block);
+    Mesh->SetGenerateOverlapEvents(false);
+    // Rideable like a ramp, but NOT a quarter-pipe (no vert airs).
+    Mesh->ComponentTags.Add(FName(TEXT("BMX_RAMP")));
+    Mesh->ComponentTags.Add(FName(TEXT("BMX_DIRT")));
+    Mesh->SetCastShadow(true);
+    Mesh->RegisterComponent();
+
+    const float HalfWidth = Width * 0.5f;
+    const float BottomZ = -14.0f;
+    TArray<FVector> Vertices;
+    TArray<int32> Triangles;
+    TArray<FVector> Normals;
+    TArray<FVector2D> UVs;
+    for (int32 I = 0; I + 1 < Profile.Num(); ++I)
+    {
+        const FVector2D P0 = Profile[I];
+        const FVector2D P1 = Profile[I + 1];
+        const float Slope = (P1.Y - P0.Y) / FMath::Max(1.0f, float(P1.X - P0.X));
+        BMXParkGeometry::Quad(Vertices, Triangles, Normals, UVs,
+            FVector(P0.X, -HalfWidth, P0.Y), FVector(P0.X, HalfWidth, P0.Y),
+            FVector(P1.X, HalfWidth, P1.Y), FVector(P1.X, -HalfWidth, P1.Y),
+            FVector(-Slope, 0.0f, 1.0f), Width / 180.0f, (P1.X - P0.X) / 180.0f);
+        BMXParkGeometry::Quad(Vertices, Triangles, Normals, UVs,
+            FVector(P0.X, -HalfWidth, BottomZ), FVector(P0.X, -HalfWidth, P0.Y),
+            FVector(P1.X, -HalfWidth, P1.Y), FVector(P1.X, -HalfWidth, BottomZ),
+            FVector(0, -1, 0), (P1.X - P0.X) / 180.0f, 1.0f);
+        BMXParkGeometry::Quad(Vertices, Triangles, Normals, UVs,
+            FVector(P0.X, HalfWidth, BottomZ), FVector(P1.X, HalfWidth, BottomZ),
+            FVector(P1.X, HalfWidth, P1.Y), FVector(P0.X, HalfWidth, P0.Y),
+            FVector(0, 1, 0), (P1.X - P0.X) / 180.0f, 1.0f);
+    }
+    const FVector2D First = Profile[0];
+    const FVector2D Last = Profile.Last();
+    // End caps (the lip's steep back face) and underside close the solid.
+    BMXParkGeometry::Quad(Vertices, Triangles, Normals, UVs,
+        FVector(First.X, -HalfWidth, BottomZ), FVector(First.X, -HalfWidth, First.Y + 0.5f),
+        FVector(First.X, HalfWidth, First.Y + 0.5f), FVector(First.X, HalfWidth, BottomZ),
+        FVector(-1, 0, 0), Width / 180.0f, 1.0f);
+    BMXParkGeometry::Quad(Vertices, Triangles, Normals, UVs,
+        FVector(Last.X, -HalfWidth, BottomZ), FVector(Last.X, HalfWidth, BottomZ),
+        FVector(Last.X, HalfWidth, Last.Y + 0.5f), FVector(Last.X, -HalfWidth, Last.Y + 0.5f),
+        FVector(1, 0, 0), Width / 180.0f, 1.0f);
+    BMXParkGeometry::Quad(Vertices, Triangles, Normals, UVs,
+        FVector(First.X, -HalfWidth, BottomZ), FVector(Last.X, -HalfWidth, BottomZ),
+        FVector(Last.X, HalfWidth, BottomZ), FVector(First.X, HalfWidth, BottomZ),
+        FVector(0, 0, -1), (Last.X - First.X) / 180.0f, Width / 180.0f);
+
+    Mesh->CreateMeshSection(0, Vertices, Triangles, Normals, UVs,
+                            TArray<FColor>(), TArray<FProcMeshTangent>(), true);
+    if (Material) Mesh->SetMaterial(0, Material);
+}
+
+// One dirt jump set heading +X: a 130 cm lip (curving up to ~40 degrees), a
+// 280 cm gap, then a long landing: 45-degree backside, short deck, rounded
+// knuckle and a two-stage downslope. Tuned (2D trajectory check) so roughly
+// 36-45 km/h approach speed lands on the downslope; faster rolls onto the
+// flat run-out, slower cases the backside but rides over.
+void ABMXTrainingPark::AddDirtJump(float LipStartX, float Y)
+{
+    constexpr float LipLength = 200.0f;
+    constexpr float LipHeight = 130.0f;
+    constexpr float LipAngle = 40.0f * PI / 180.0f;
+    TArray<FVector2D> Lip;
+    for (int32 I = 0; I <= 14; ++I)
+    {
+        const float Theta = LipAngle * float(I) / 14.0f;
+        Lip.Add(FVector2D(LipLength * FMath::Sin(Theta) / FMath::Sin(LipAngle),
+                          LipHeight * (1.0f - FMath::Cos(Theta)) / (1.0f - FMath::Cos(LipAngle))));
+    }
+    AddProfileMound(FVector(LipStartX, Y, 0.0f), 0.0f, 300.0f, Lip, DirtMaterial);
+
+    const TArray<FVector2D> Landing = {
+        FVector2D(0, 0), FVector2D(150, 150), FVector2D(210, 150), FVector2D(240, 148),
+        FVector2D(270, 141), FVector2D(310, 128), FVector2D(560, 66), FVector2D(820, 14),
+        FVector2D(880, 3), FVector2D(920, 0) };
+    AddProfileMound(FVector(LipStartX + LipLength + 280.0f, Y, 0.0f), 0.0f, 340.0f, Landing, DirtMaterial);
 }
 
 void ABMXTrainingPark::BeginPlay()
@@ -241,6 +334,7 @@ void ABMXTrainingPark::BeginPlay()
     LedgeMaterial = BMXParkGeometry::TintedMaterial(this, Basic, FLinearColor(0.30f,0.62f,0.76f,1.0f));
     RailMaterial = BMXParkGeometry::TintedMaterial(this, Basic, FLinearColor(0.77f,0.83f,0.87f,1.0f));
     WallMaterial = BMXParkGeometry::TintedMaterial(this, Basic, FLinearColor(0.13f,0.14f,0.21f,1.0f));
+    DirtMaterial = BMXParkGeometry::TintedMaterial(this, Basic, FLinearColor(0.36f,0.22f,0.12f,1.0f));
 
     // 60x60 metre self-contained test park. Floor TOP is Z=0.
     AddBox(FVector(0, 0, -35), FVector(6000, 6000, 70), FRotator::ZeroRotator, ConcreteMaterial);
@@ -270,11 +364,17 @@ void ABMXTrainingPark::BeginPlay()
     AddRail(FVector(-300, 650, 0), 440, 98);
     AddRail(FVector(800, 800, 0), 350, 80);
 
+    // v0.3.0 dirt jump line along the south edge (Y=-2350), heading +X.
+    // Press 2 in game to start at its run-in. Three sets, 1650 cm apart.
+    AddDirtJump(-2250.0f, -2350.0f);
+    AddDirtJump(-600.0f, -2350.0f);
+    AddDirtJump(1050.0f, -2350.0f);
+
     // Perimeter walls are deliberately visible, not invisible world blockers.
     AddBox(FVector(0,-2990,100), FVector(6000,20,200), FRotator::ZeroRotator, WallMaterial);
     AddBox(FVector(0, 2990,100), FVector(6000,20,200), FRotator::ZeroRotator, WallMaterial);
     AddBox(FVector(-2990,0,100), FVector(20,6000,200), FRotator::ZeroRotator, WallMaterial);
     AddBox(FVector(2990,0,100), FVector(20,6000,200), FRotator::ZeroRotator, WallMaterial);
 
-    UE_LOG(LogTemp, Log, TEXT("[BMX PARK v0.2.0] Steep quarter-pipes (vert), tabletop, ledge and rails initialized."));
+    UE_LOG(LogTemp, Log, TEXT("[BMX PARK v0.3.0] Quarter-pipes (vert), tabletop, ledge, rails and dirt jump line initialized."));
 }

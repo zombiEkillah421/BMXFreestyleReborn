@@ -39,6 +39,8 @@ private:
     TObjectPtr<UMaterialInterface> RailMaterial;
     UPROPERTY(Transient)
     TObjectPtr<UMaterialInterface> WallMaterial;
+    UPROPERTY(Transient)
+    TObjectPtr<UMaterialInterface> DirtMaterial;
 
     void AddBox(const FVector& Center, const FVector& Dimensions,
                 const FRotator& Rotation = FRotator::ZeroRotator,
@@ -46,4 +48,9 @@ private:
     void AddRail(const FVector& Center, float Length, float Height);
     void AddRamp(const FVector& Origin, const FRotator& Rotation,
                  float Length, float Width, float Height, bool bCurved);
+    // v0.3.0: a closed, rideable mound from a side profile (X along, Z up),
+    // used for dirt lips and landings. Profile must start and end at Z >= 0.
+    void AddProfileMound(const FVector& Origin, float Yaw, float Width,
+                         const TArray<FVector2D>& Profile, UMaterialInterface* Material);
+    void AddDirtJump(float LipStartX, float Y);
 };
