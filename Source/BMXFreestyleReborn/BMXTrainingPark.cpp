@@ -295,10 +295,10 @@ void ABMXTrainingPark::AddProfileMound(const FVector& Origin, float Yaw, float W
 }
 
 // One dirt jump set heading +X: a 130 cm lip (curving up to ~40 degrees), a
-// 280 cm gap, then a long landing: 45-degree backside, short deck, rounded
+// 280 cm gap, then a long landing: 30-degree backside, short deck, rounded
 // knuckle and a two-stage downslope. Tuned (2D trajectory check) so roughly
-// 36-45 km/h approach speed lands on the downslope; faster rolls onto the
-// flat run-out, slower cases the backside but rides over.
+// 40-45 km/h approach lands on the downslope, 38 km/h on the deck; faster
+// rolls onto the flat run-out, slower cases the backside and rides over.
 void ABMXTrainingPark::AddDirtJump(float LipStartX, float Y)
 {
     constexpr float LipLength = 200.0f;
@@ -313,10 +313,13 @@ void ABMXTrainingPark::AddDirtJump(float LipStartX, float Y)
     }
     AddProfileMound(FVector(LipStartX, Y, 0.0f), 0.0f, 300.0f, Lip, DirtMaterial);
 
+    // v0.3.2: 30-degree backside (was 45) so a short landing can still be
+    // ridden up and over instead of leaving you stuck at its base.
     const TArray<FVector2D> Landing = {
-        FVector2D(0, 0), FVector2D(150, 150), FVector2D(210, 150), FVector2D(240, 148),
-        FVector2D(270, 141), FVector2D(310, 128), FVector2D(560, 66), FVector2D(820, 14),
-        FVector2D(880, 3), FVector2D(920, 0) };
+        FVector2D(0.0f, 0.0f), FVector2D(260.0f, 150.0f), FVector2D(320.0f, 150.0f),
+        FVector2D(350.0f, 148.0f), FVector2D(380.0f, 141.0f), FVector2D(420.0f, 128.0f),
+        FVector2D(670.0f, 66.0f), FVector2D(880.0f, 12.0f), FVector2D(930.0f, 2.0f),
+        FVector2D(970.0f, 0.0f) };
     AddProfileMound(FVector(LipStartX + LipLength + 280.0f, Y, 0.0f), 0.0f, 340.0f, Landing, DirtMaterial);
 }
 
@@ -365,10 +368,10 @@ void ABMXTrainingPark::BeginPlay()
     AddRail(FVector(800, 800, 0), 350, 80);
 
     // v0.3.0 dirt jump line along the south edge (Y=-2350), heading +X.
-    // Press 2 in game to start at its run-in. Three sets, 1650 cm apart.
-    AddDirtJump(-2250.0f, -2350.0f);
-    AddDirtJump(-600.0f, -2350.0f);
-    AddDirtJump(1050.0f, -2350.0f);
+    // Press 2 in game for a rolling start at its run-in. Three sets, 1710 cm apart.
+    AddDirtJump(-2150.0f, -2350.0f);
+    AddDirtJump(-440.0f, -2350.0f);
+    AddDirtJump(1270.0f, -2350.0f);
 
     // Perimeter walls are deliberately visible, not invisible world blockers.
     AddBox(FVector(0,-2990,100), FVector(6000,20,200), FRotator::ZeroRotator, WallMaterial);

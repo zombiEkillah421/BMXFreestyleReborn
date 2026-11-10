@@ -312,7 +312,7 @@ void ABMXRiderPawn::BeginPlay()
 {
     Super::BeginPlay();
     ResetBike();
-    ShowStatus(TEXT("v0.3.1  |  F/G FLIP  Q/E SPIN  SHIFT MANUAL  HOLD W DOWNHILL TO PUMP"), 6.0f);
+    ShowStatus(TEXT("v0.3.2  |  F/G FLIP  Q/E SPIN  SHIFT MANUAL  HOLD W DOWNHILL TO PUMP"), 6.0f);
 }
 
 void ABMXRiderPawn::PossessedBy(AController* NewController)
@@ -1427,6 +1427,7 @@ void ABMXRiderPawn::ResetBike()
     SpinVelocityDeg = 0.0f;
     bOnQuarterPipe = false;
     SetActorLocationAndRotation(ResetLocation, ResetRotation, false, nullptr, ETeleportType::TeleportPhysics);
+    SpeedCmPerSec = SpawnRollSpeed; // rolling start on the dirt line, 0 in the park
     ResetVisuals();
     RecenterCamera();
 }
@@ -1434,15 +1435,20 @@ void ABMXRiderPawn::ResetBike()
 // there after bails). Key 1: back to the park start.
 void ABMXRiderPawn::ResetToDirtLine()
 {
-    ResetLocation = FVector(-2880.0f, -2350.0f, 60.0f);
+    // v0.3.2: start 5 m off the wall so the camera isn't squashed into the
+    // rider, with a rolling start at jump speed (the old 7 m run-in from a
+    // standstill left you too slow, landing short in the gap).
+    ResetLocation = FVector(-2500.0f, -2350.0f, 60.0f);
     ResetRotation = FRotator(0.0f, 0.0f, 0.0f);
+    SpawnRollSpeed = 1150.0f;
     ResetBike();
-    ShowStatus(TEXT("DIRT LINE  |  ABOUT 40 KM/H CLEARS THE GAPS"), 3.0f);
+    ShowStatus(TEXT("DIRT LINE  |  40-45 KM/H LANDS THE DOWNSLOPE - EASE OFF W IF YOU OVERSHOOT"), 4.0f);
 }
 void ABMXRiderPawn::ResetToPark()
 {
     ResetLocation = FVector(-150.0f, -1150.0f, 60.0f);
     ResetRotation = FRotator(0.0f, 180.0f, 0.0f);
+    SpawnRollSpeed = 0.0f;
     ResetBike();
 }
 void ABMXRiderPawn::ShowStatus(const FString& Message, float Seconds)

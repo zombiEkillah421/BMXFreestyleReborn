@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2 — dirt line fixes
+
+From the v0.3.1 playtest video (vert airs and manual combos working):
+- The dirt spawn was about 1 m from the wall, so the camera was squashed into the rider. It now starts 5 m out with a **rolling start** at about 41 km/h, including after bails.
+- The run-in from a standstill was too short, so you landed short in the gap. The rolling start fixes that.
+- The landing backside was 45°, too steep to pedal up, so landing short left you stuck at its base. It's now 30° and rideable. 40–45 km/h lands the downslope, 38 km/h lands the deck, slower rides up and over, and faster lands on the flat run-out.
+- The three sets were moved to fit the new start.
+
+
 ## 0.3.1 — playtest fixes (dirt jumps, manuals, flips, pumping)
 
 From the v0.3.0 playtest video:

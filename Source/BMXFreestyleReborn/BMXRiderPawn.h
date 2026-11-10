@@ -274,6 +274,7 @@ private:
     float VertAirLaunchPitchDeg = 0.0f;
     bool bShowDebugHUD = true;
     bool bOnQuarterPipe = false;
+    float SpawnRollSpeed = 0.0f;
 
     // Air rotation (v0.3.0). Positive flip = nose up (backflip); positive spin = right.
     float FlipAxisInput = 0.0f;
