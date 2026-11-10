@@ -20,7 +20,7 @@ void ABMXHUD::DrawHUD()
     const float PanelHeight = bDebug ? 192.0f : 104.0f;
     DrawRect(Dark, 26, 24, 460, PanelHeight);
     DrawRect(Cyan, 26, 24, 6, PanelHeight);
-    DrawText(TEXT("BMX FREESTYLE REBORN  |  PARK 01 - v0.3.3"), White, 46, 34, GEngine->GetSmallFont(), 1.05f, false);
+    DrawText(TEXT("BMX FREESTYLE REBORN  |  PARK 01 - v0.3.4"), White, 46, 34, GEngine->GetSmallFont(), 1.05f, false);
     DrawText(FString::Printf(TEXT("SCORE   %07d"), Rider->GetTotalScore()), Gold, 45, 64, GEngine->GetMediumFont(), 1.35f, false);
     if (bDebug)
     {

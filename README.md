@@ -3,7 +3,7 @@
 An original arcade BMX freestyle game for Windows PC, built in **Unreal Engine 5.8 (C++)**.
 Inspired by the feel of 2001-era arcade BMX games: responsive riding, big airs, trick combos.
 
-**Current version:** v0.3.3 — early playable prototype (see `Docs/CHANGELOG.md`).
+**Current version:** v0.3.4 — early playable prototype (see `Docs/CHANGELOG.md`).
 
 ## What's in the prototype
 

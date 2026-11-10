@@ -238,9 +238,12 @@ private:
     UPROPERTY(EditAnywhere, Category="BMX|Tricks")
     float HopChargeSeconds = 0.35f;
     UPROPERTY(EditAnywhere, Category="BMX|Tricks")
-    float MinHopScale = 0.9f;
+    float MinHopScale = 0.75f;
     UPROPERTY(EditAnywhere, Category="BMX|Tricks")
-    float MaxHopScale = 1.3f;
+    float MaxHopScale = 1.1f;
+    // Gravity multiplier for bunny hops off flat ground: snappier, less floaty.
+    UPROPERTY(EditAnywhere, Category="BMX|Tricks")
+    float HopGravityScale = 1.6f;
     // Bunny hop front-wheel lift (degrees, pivoting on the rear axle):
     // a light tap lifts to Min, a full charge to Max.
     UPROPERTY(EditAnywhere, Category="BMX|Tricks")
@@ -326,6 +329,7 @@ private:
     float HopPendingPower = 1.0f;
     bool bHopLeveling = false;
     float HopLiftPitchDeg = 0.0f;
+    bool bHopAir = false;
     FVector ResetLocation = FVector(-150.0f, -1150.0f, 60.0f);
     FRotator ResetRotation = FRotator(0.0f, 180.0f, 0.0f);
 

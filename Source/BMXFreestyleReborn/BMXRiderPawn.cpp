@@ -313,7 +313,7 @@ void ABMXRiderPawn::BeginPlay()
 {
     Super::BeginPlay();
     ResetBike();
-    ShowStatus(TEXT("v0.3.3  |  F/G FLIP  Q/E SPIN  SHIFT MANUAL  HOLD W DOWNHILL TO PUMP"), 6.0f);
+    ShowStatus(TEXT("v0.3.4  |  F/G FLIP  Q/E SPIN  SHIFT MANUAL  HOLD W DOWNHILL TO PUMP"), 6.0f);
 }
 
 void ABMXRiderPawn::PossessedBy(AController* NewController)
@@ -900,7 +900,7 @@ void ABMXRiderPawn::MoveBike(float Dt)
         // touchdown, not a wall hit - only real walls scrub speed.
         if (HorizontalHit.ImpactNormal.Z < 0.35f) SpeedCmPerSec *= 0.78f;
     }
-    VerticalSpeed = FMath::Max(-2800.0f, VerticalSpeed - Gravity * Dt);
+    VerticalSpeed = FMath::Max(-2800.0f, VerticalSpeed - Gravity * (bHopAir ? HopGravityScale : 1.0f) * Dt);
     const float BeforeZ = GetActorLocation().Z;
     FHitResult VerticalHit;
     SetActorLocation(GetActorLocation() + FVector(0.0f, 0.0f, VerticalSpeed * Dt),
@@ -1056,6 +1056,7 @@ void ABMXRiderPawn::LaunchIntoAir(float ExtraUpSpeed, float MinUpSpeed)
     bGrounded = false;
     AirTime = 0.0f;
     bHopCharging = false;
+    bHopAir = false; // DoHop sets it again after this for flat-ground hops
     FlipAngleDeg = 0.0f;
     SpinAngleDeg = 0.0f;
     FlipVelocityDeg = 0.0f;
@@ -1121,6 +1122,9 @@ void ABMXRiderPawn::HopReleased()
 
 void ABMXRiderPawn::DoHop(float Power)
 {
+    // Hops off (near-)flat ground get snappier gravity; hops off ramps and
+    // lips keep normal gravity so ramp/dirt tuning is unchanged.
+    const bool bFlatHop = FMath::Abs(FloorPitchDeg) < 12.0f;
     // A hop on a slope keeps the slope's momentum (and can start a vert air
     // near the top of a quarter-pipe).
     LaunchIntoAir(HopSpeed * Power + FMath::Clamp(FMath::Abs(SpeedCmPerSec)*0.055f,0.0f,65.0f),
@@ -1129,6 +1133,7 @@ void ABMXRiderPawn::DoHop(float Power)
     if (!bVertAir) FloorPitchDeg *= 0.5f;
     // In the air the rear wheel now comes up to meet the front (see Tick).
     bHopLeveling = true;
+    bHopAir = bFlatHop && !bVertAir;
 }
 
 // ---------------------------------------------------------------------------
@@ -1335,6 +1340,7 @@ void ABMXRiderPawn::AddComboTrick(const FString& Name, int32 Points)
 // ---------------------------------------------------------------------------
 bool ABMXRiderPawn::ResolveLanding(float& InOutLandedPitch)
 {
+    bHopAir = false;
     const float VertYaw = bVertAir ? 180.0f : 0.0f;
     bVertAir = false;
     VertAirYawDeg = 0.0f;
@@ -1469,6 +1475,7 @@ void ABMXRiderPawn::Bail(const FString& Reason)
     bHopCharging = false;
     bHopPending = false;
     bHopLeveling = false;
+    bHopAir = false;
     HopLiftPitchDeg = 0.0f;
     LandingLinkSeconds = 0.0f;
     FlipAngleDeg = 0.0f;
@@ -1521,6 +1528,7 @@ void ABMXRiderPawn::ResetBike()
     HopCharge = 0.0f;
     bHopPending = false;
     bHopLeveling = false;
+    bHopAir = false;
     HopLiftPitchDeg = 0.0f;
     LandingLinkSeconds = 0.0f;
     FlipAngleDeg = 0.0f;

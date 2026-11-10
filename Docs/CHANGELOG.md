@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.4 — snappier bunny hops
+
+- Bunny hops were floaty: a full charge went about 3.8 m up with about 1.8 s of air. Hops off flat ground now use 1.6x gravity and a lower pop (tap 0.75x, full 1.1x). A tap is about 0.8 m with 0.65 s of air, a full charge about 1.6 m with 0.9 s. Hops off ramps and lips, dirt jumps and vert airs are unchanged. Tuning is under BMX|Tricks: HopGravityScale, MinHopScale, MaxHopScale.
+
+
 ## 0.3.3 — smooth dirt lip takeoffs
 
 - At a dirt lip the front wheel passed the top while the rear wheel was still low on the lip. The game averaged the gap floor into the ride height, pulling the bike down into the lip and launching it from halfway up at a shallow angle. That was the "stuck at the top" feeling.
