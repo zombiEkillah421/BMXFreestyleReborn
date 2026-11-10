@@ -296,8 +296,9 @@ void ABMXRiderPawn::UpdateVisualMotion(float Dt)
 
     // ---- Whole-rider orientation: slope + flips + spins + manual ----
     const float Lean = (bGrounded ? -SteeringInput * NormalizedSpeed * 8.0f : 0.0f);
-    const float ManualPitch = ManualAlpha * (16.0f + 10.0f * ManualBalance);
-    // A manual pivots round the REAR axle, so the back wheel stays planted.
+    const float ManualPitch = ManualAlpha * (16.0f + 10.0f * ManualBalance) + HopLiftPitchDeg;
+    // Manuals and the bunny-hop front lift pivot round the REAR axle, so the
+    // back wheel stays planted while the front comes up.
     const FVector RearAxle(-63.0f, 0.0f, -20.0f);
     const FVector ManualOffset = RearAxle - FRotator(ManualPitch, 0.0f, 0.0f).RotateVector(RearAxle);
     TrickPivot->SetRelativeLocationAndRotation(FVector(0.0f, 0.0f, 55.0f) + ManualOffset,
@@ -490,6 +491,46 @@ void ABMXRiderPawn::Tick(float DeltaSeconds)
     {
         if (bGrounded) HopCharge = FMath::Min(HopChargeSeconds, HopCharge + TotalDt);
         else bHopCharging = false;
+    }
+    if (bHopPending)
+    {
+        if (!bGrounded || bBailed)
+        {
+            bHopPending = false; // rolled off something first
+        }
+        else
+        {
+            HopPendingSeconds -= TotalDt;
+            if (HopPendingSeconds <= 0.0f)
+            {
+                bHopPending = false;
+                DoHop(HopPendingPower);
+            }
+        }
+    }
+    // Bunny-hop body language: front wheel lifts while loading / just before
+    // the pop (pivoting on the rear axle), then in the air the rear wheel
+    // comes up and the bike levels out.
+    {
+        float LiftTarget = 0.0f;
+        float LiftRate = 14.0f;
+        if (bGrounded && bHopCharging)
+        {
+            const float ChargeFrac = HopCharge / FMath::Max(0.05f, HopChargeSeconds);
+            LiftTarget = HopFrontLiftMinDeg + (HopFrontLiftMaxDeg - HopFrontLiftMinDeg) * ChargeFrac;
+        }
+        else if (bGrounded && bHopPending)
+        {
+            LiftTarget = FMath::Max(HopLiftPitchDeg, HopFrontLiftMaxDeg * 0.7f);
+            LiftRate = 30.0f;
+        }
+        else if (!bGrounded && bHopLeveling)
+        {
+            LiftRate = 7.0f; // ~0.3 s for the rear to catch up
+            if (HopLiftPitchDeg < 0.5f) bHopLeveling = false;
+        }
+        if (bGrounded && !bHopCharging && !bHopPending) bHopLeveling = false;
+        HopLiftPitchDeg = FMath::FInterpTo(HopLiftPitchDeg, LiftTarget, TotalDt, LiftRate);
     }
     UpdateManual(TotalDt);
     // Combo link window after a clean landing: press manual to keep the
@@ -1071,7 +1112,11 @@ void ABMXRiderPawn::HopReleased()
     bHopCharging = false;
     if (bBailed || !bGrounded) return;
     const float Charge = FMath::Clamp(HopCharge / FMath::Max(0.05f, HopChargeSeconds), 0.0f, 1.0f);
-    DoHop(FMath::Lerp(MinHopScale, MaxHopScale, Charge));
+    // v0.3.3: a real bunny hop lifts the front wheel first. If Space was only
+    // tapped, give the front a moment (under 0.1 s) to come up before the pop.
+    bHopPending = true;
+    HopPendingPower = FMath::Lerp(MinHopScale, MaxHopScale, Charge);
+    HopPendingSeconds = FMath::Max(0.0f, HopFrontLiftSeconds - HopCharge);
 }
 
 void ABMXRiderPawn::DoHop(float Power)
@@ -1082,6 +1127,8 @@ void ABMXRiderPawn::DoHop(float Power)
                   HopSpeed * 0.6f * Power);
     JumpGrace = 0.22f;
     if (!bVertAir) FloorPitchDeg *= 0.5f;
+    // In the air the rear wheel now comes up to meet the front (see Tick).
+    bHopLeveling = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -1420,6 +1467,9 @@ void ABMXRiderPawn::Bail(const FString& Reason)
     bInManual = false;
     ManualAlpha = 0.0f;
     bHopCharging = false;
+    bHopPending = false;
+    bHopLeveling = false;
+    HopLiftPitchDeg = 0.0f;
     LandingLinkSeconds = 0.0f;
     FlipAngleDeg = 0.0f;
     SpinAngleDeg = 0.0f;
@@ -1469,6 +1519,9 @@ void ABMXRiderPawn::ResetBike()
     ManualBalance = 0.0f;
     bHopCharging = false;
     HopCharge = 0.0f;
+    bHopPending = false;
+    bHopLeveling = false;
+    HopLiftPitchDeg = 0.0f;
     LandingLinkSeconds = 0.0f;
     FlipAngleDeg = 0.0f;
     SpinAngleDeg = 0.0f;
