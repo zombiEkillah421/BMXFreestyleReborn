@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.1 — playtest fixes (dirt jumps, manuals, flips, pumping)
+
+From the v0.3.0 playtest video:
+- **Dirt jumps / steep landings:** falling onto a steep face (dirt landing backside, ramp face) left the bike hanging in the air until "PHYSICS RECOVERY", because the body touched the slope before the wheels reached landing height. Touching any rideable slope with wheel support now counts as landing. Brushing a rideable slope in the air no longer scrubs speed.
+- **Manual:** W held from pedaling dropped the nose instantly. W/S now only balance once you've released W after starting the manual, and the balance is calmer (instability 1.4 → 0.9, gentler wobble, correction 2.2 → 1.6). Tuning is under BMX|Tricks.
+- **Accidental flips:** keyboard flips/spins are now only F/G and Q/E. W/S and A/D no longer rotate you in the air (the gamepad stick still does).
+- **Pumping:** holding W while dropping down a transition adds speed (PumpAcceleration). Above pedal speed, drag is now light (HighSpeedDrag 60). Coasting drag is 240 → 140.
+- **Vert energy:** the vert launch used sin(chord pitch), which threw away about 35% of the speed every air, so airs shrank. Now 70% of the speed shows as height (a full-speed first air is about 4 m), and dropping back in returns the launch speed (95%). Back-and-forth airs keep their height and grow when you pump. The speed cap is raised to 1.8x pedal speed.
+
+
 ## 0.3.0 — freestyle core
 
 **Tricks you can combine**

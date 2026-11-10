@@ -20,7 +20,7 @@ void ABMXHUD::DrawHUD()
     const float PanelHeight = bDebug ? 192.0f : 104.0f;
     DrawRect(Dark, 26, 24, 460, PanelHeight);
     DrawRect(Cyan, 26, 24, 6, PanelHeight);
-    DrawText(TEXT("BMX FREESTYLE REBORN  |  PARK 01 - v0.3.0"), White, 46, 34, GEngine->GetSmallFont(), 1.05f, false);
+    DrawText(TEXT("BMX FREESTYLE REBORN  |  PARK 01 - v0.3.1"), White, 46, 34, GEngine->GetSmallFont(), 1.05f, false);
     DrawText(FString::Printf(TEXT("SCORE   %07d"), Rider->GetTotalScore()), Gold, 45, 64, GEngine->GetMediumFont(), 1.35f, false);
     if (bDebug)
     {
@@ -70,7 +70,7 @@ void ABMXHUD::DrawHUD()
         DrawText(Rider->GetStatusMessage(), Cyan, W*0.5f - 215, H*0.23f + 10, GEngine->GetMediumFont(), 1.0f, false);
     }
     DrawRect(Dark, 26, H - 92, W - 52, 67);
-    DrawText(TEXT("W/S PEDAL   A/D STEER   HOLD SPACE BIG HOP   SHIFT MANUAL   AIR: W/S FLIP  A/D SPIN   1 PARK  2 DIRT"), White,
+    DrawText(TEXT("W/S PEDAL (HOLD W DOWNHILL = PUMP)   A/D STEER   HOLD SPACE BIG HOP   SHIFT MANUAL   AIR: F/G FLIP  Q/E SPIN   1 PARK  2 DIRT"), White,
              42, H - 81, GEngine->GetSmallFont(), 0.94f, false);
     DrawText(TEXT("B BARSPIN  T TAILWHIP  J NO-HANDER  K SUPERMAN  L CAN-CAN  U X-UP  I TURNDOWN  O TABLETOP  H NOTHING  N TUCK"), Cyan,
              42, H - 52, GEngine->GetSmallFont(), 0.94f, false);

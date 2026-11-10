@@ -168,6 +168,8 @@ private:
     void ManualReleased();
     void SetFlipAxis(float Value);
     void SetSpinAxis(float Value);
+    void SetAirStickX(float Value);
+    void SetAirStickY(float Value);
     void StylePressed(EBMXStyleTrick Trick);
     void StyleReleased(EBMXStyleTrick Trick);
     void ResetToDirtLine();
@@ -187,7 +189,13 @@ private:
     float ReverseSpeed = 420.0f;
     // Rolling resistance when not pedaling (cm/s^2). Also limits speed above max.
     UPROPERTY(EditAnywhere, Category="BMX|Tuning")
-    float CoastDrag = 240.0f;
+    float CoastDrag = 140.0f;
+    // Drag when already faster than pedaling allows (holding W).
+    UPROPERTY(EditAnywhere, Category="BMX|Tuning")
+    float HighSpeedDrag = 60.0f;
+    // Extra acceleration from pumping (holding W) down a transition.
+    UPROPERTY(EditAnywhere, Category="BMX|Tuning")
+    float PumpAcceleration = 700.0f;
     // How strongly slopes speed you up / slow you down (1.0 = real gravity).
     UPROPERTY(EditAnywhere, Category="BMX|Tuning")
     float SlopeGravityScale = 0.85f;
@@ -198,11 +206,14 @@ private:
     UPROPERTY(EditAnywhere, Category="BMX|Vert")
     float VertLaunchPitchDeg = 30.0f; // tabletop wedges are ~25 deg
     UPROPERTY(EditAnywhere, Category="BMX|Vert")
-    float VertLaunchScale = 0.80f;
+    float VertLaunchScale = 0.70f;
+    // Share of launch speed given back when dropping into a quarter-pipe.
+    UPROPERTY(EditAnywhere, Category="BMX|Vert")
+    float VertLandingKeep = 0.95f;
     UPROPERTY(EditAnywhere, Category="BMX|Vert")
     float MinVertUpSpeed = 300.0f;
     UPROPERTY(EditAnywhere, Category="BMX|Vert")
-    float MaxVertUpSpeed = 1050.0f;
+    float MaxVertUpSpeed = 1100.0f; // ~6 m above the coping
     // How far (cm) the rider drifts back over the ramp during a vert air,
     // so both wheels come down on the transition instead of the coping.
     UPROPERTY(EditAnywhere, Category="BMX|Vert")
@@ -217,6 +228,12 @@ private:
     float LandingToleranceDeg = 50.0f;
     UPROPERTY(EditAnywhere, Category="BMX|Tricks")
     float ManualPointsPerSecond = 60.0f;
+    // Manual feel: how fast an off-balance manual tips further, and how
+    // strongly W/S correct it.
+    UPROPERTY(EditAnywhere, Category="BMX|Tricks")
+    float ManualInstability = 0.9f;
+    UPROPERTY(EditAnywhere, Category="BMX|Tricks")
+    float ManualControl = 1.6f;
     // Holding Space charges the bunny hop: a tap = MinHopScale, full charge = MaxHopScale.
     UPROPERTY(EditAnywhere, Category="BMX|Tricks")
     float HopChargeSeconds = 0.35f;
@@ -269,6 +286,9 @@ private:
     // W to pedal into a jump doesn't throw an accidental frontflip.
     bool bStickFlipArmed = false;
     bool bStickSpinArmed = false;
+    float AirStickX = 0.0f;
+    float AirStickY = 0.0f;
+    bool bManualInputArmed = false;
 
     // Style tricks.
     EBMXStyleTrick ActiveStyle = EBMXStyleTrick::None;

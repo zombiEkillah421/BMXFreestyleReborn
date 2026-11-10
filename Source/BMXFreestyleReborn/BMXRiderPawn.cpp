@@ -312,7 +312,7 @@ void ABMXRiderPawn::BeginPlay()
 {
     Super::BeginPlay();
     ResetBike();
-    ShowStatus(TEXT("v0.3.0  |  SHIFT = MANUAL   HOLD SPACE = BIG HOP   2 = DIRT JUMPS"), 6.0f);
+    ShowStatus(TEXT("v0.3.1  |  F/G FLIP  Q/E SPIN  SHIFT MANUAL  HOLD W DOWNHILL TO PUMP"), 6.0f);
 }
 
 void ABMXRiderPawn::PossessedBy(AController* NewController)
@@ -338,6 +338,8 @@ void ABMXRiderPawn::SetupPlayerInputComponent(UInputComponent* Input)
     Input->BindAxis(TEXT("CameraPitch"), this, &ABMXRiderPawn::OrbitPitch);
     Input->BindAxis(TEXT("FlipAxis"), this, &ABMXRiderPawn::SetFlipAxis);
     Input->BindAxis(TEXT("SpinAxis"), this, &ABMXRiderPawn::SetSpinAxis);
+    Input->BindAxis(TEXT("AirStickX"), this, &ABMXRiderPawn::SetAirStickX);
+    Input->BindAxis(TEXT("AirStickY"), this, &ABMXRiderPawn::SetAirStickY);
     Input->BindAction(TEXT("Hop"), IE_Pressed, this, &ABMXRiderPawn::HopPressed);
     Input->BindAction(TEXT("Hop"), IE_Released, this, &ABMXRiderPawn::HopReleased);
     Input->BindAction(TEXT("Manual"), IE_Pressed, this, &ABMXRiderPawn::ManualPressed);
@@ -373,6 +375,8 @@ void ABMXRiderPawn::SetupPlayerInputComponent(UInputComponent* Input)
 
 void ABMXRiderPawn::SetFlipAxis(float Value) { FlipAxisInput = FMath::Clamp(Value,-1.0f,1.0f); }
 void ABMXRiderPawn::SetSpinAxis(float Value) { SpinAxisInput = FMath::Clamp(Value,-1.0f,1.0f); }
+void ABMXRiderPawn::SetAirStickX(float Value) { AirStickX = FMath::Clamp(Value,-1.0f,1.0f); }
+void ABMXRiderPawn::SetAirStickY(float Value) { AirStickY = FMath::Clamp(Value,-1.0f,1.0f); }
 
 void ABMXRiderPawn::ToggleDebugHUD() { bShowDebugHUD = !bShowDebugHUD; }
 
@@ -802,7 +806,9 @@ void ABMXRiderPawn::MoveBike(float Dt)
             SetActorLocation(GetActorLocation() + FVector(Slide.X, Slide.Y, 0.0f),
                              true, &SlideHit);
         }
-        SpeedCmPerSec *= 0.78f;
+        // v0.3.1: brushing a rideable slope (e.g. a landing's face) is a
+        // touchdown, not a wall hit - only real walls scrub speed.
+        if (HorizontalHit.ImpactNormal.Z < 0.35f) SpeedCmPerSec *= 0.78f;
     }
     VerticalSpeed = FMath::Max(-2800.0f, VerticalSpeed - Gravity * Dt);
     const float BeforeZ = GetActorLocation().Z;
@@ -822,14 +828,23 @@ void ABMXRiderPawn::MoveBike(float Dt)
     bRearWheelContact = LandingSupport.Rear.bSupported &&
         FMath::Abs(EndPosition.Z - (LandingSupport.Rear.FloorZ + TireBottomBelowPawn + GroundClearance)) < 22.0f;
     const float LandingZ = LandingSupport.AverageFloorZ() + TireBottomBelowPawn + GroundClearance;
+    // v0.3.1: on steep faces (dirt landing backsides, ramp faces) the body
+    // collider touches the slope BEFORE the centre reaches wheel height, which
+    // used to leave the bike hanging until "PHYSICS RECOVERY". Touching any
+    // rideable surface with wheel support underneath now counts as landing.
+    const bool bTouchingRideable =
+        (VerticalHit.bBlockingHit && VerticalHit.ImpactNormal.Z > 0.35f) ||
+        (HorizontalHit.bBlockingHit && HorizontalHit.ImpactNormal.Z > 0.35f);
     const bool bCloseEnoughToLand = LandingSupport.HasContact() &&
-        EndPosition.Z <= LandingZ + 9.0f && EndPosition.Z >= LandingZ - 18.0f;
+        EndPosition.Z <= LandingZ + 9.0f &&
+        (EndPosition.Z >= LandingZ - 18.0f || (bTouchingRideable && EndPosition.Z >= LandingZ - 80.0f));
     if (JumpGrace <= 0.0f && LandingCooldown <= 0.0f && VerticalSpeed <= 0.0f &&
         bCloseEnoughToLand)
     {
         FHitResult LandHit;
         SetActorLocation(FVector(EndPosition.X, EndPosition.Y, LandingZ), true, &LandHit);
         float LandedPitch = LandingSupport.SurfacePitchDegrees();
+        const bool bWasVertAir = bVertAir;
         // Checks rotation, turns the bike round for vert airs / 180s and
         // scores flips and spins. A bad landing has already bailed.
         if (!ResolveLanding(LandedPitch)) return;
@@ -837,9 +852,17 @@ void ABMXRiderPawn::MoveBike(float Dt)
         // Coming down a ramp face turns the fall into forward speed, so a
         // vert air drops back in with pace instead of from a standstill.
         const float LandedPitchRad = FMath::DegreesToRadians(FMath::Clamp(LandedPitch, -62.0f, 62.0f));
-        SpeedCmPerSec = FMath::Clamp(
-            SpeedCmPerSec * FMath::Cos(LandedPitchRad) + VerticalSpeed * FMath::Sin(LandedPitchRad),
-            -MaxForwardSpeed, MaxForwardSpeed * 1.5f);
+        SpeedCmPerSec = SpeedCmPerSec * FMath::Cos(LandedPitchRad) + VerticalSpeed * FMath::Sin(LandedPitchRad);
+        if (bWasVertAir)
+        {
+            // Dropping back in hands back the speed you launched with (the
+            // launch only shows VertLaunchScale of it as height), so energy
+            // carries from wall to wall and pumping builds bigger airs.
+            const float Magnitude = FMath::Max(FMath::Abs(SpeedCmPerSec),
+                -VerticalSpeed / FMath::Max(0.3f, VertLaunchScale) * VertLandingKeep);
+            SpeedCmPerSec = SpeedCmPerSec >= 0.0f ? Magnitude : -Magnitude;
+        }
+        SpeedCmPerSec = FMath::Clamp(SpeedCmPerSec, -MaxForwardSpeed * 1.8f, MaxForwardSpeed * 1.8f);
         bGrounded = true;
         VerticalSpeed = 0.0f;
         AirTime = 0.0f;
@@ -900,7 +923,15 @@ void ABMXRiderPawn::UpdateGroundSpeed(float Dt)
         {
             // Faster than pedaling allows (e.g. dropping in): only drag slows
             // you. Previously holding W while going downhill BRAKED the bike.
-            SpeedCmPerSec = FMath::FInterpConstantTo(SpeedCmPerSec, Target, Dt, CoastDrag);
+            SpeedCmPerSec = FMath::FInterpConstantTo(SpeedCmPerSec, Target, Dt, HighSpeedDrag);
+        }
+        // Pumping: holding W while dropping down a transition pushes the bike
+        // into the slope and adds speed, so back-and-forth airs build up.
+        const float Descent = -FloorPitchDeg * (SpeedCmPerSec >= 0.0f ? 1.0f : -1.0f);
+        if (Descent > 6.0f)
+        {
+            SpeedCmPerSec += (SpeedCmPerSec >= 0.0f ? 1.0f : -1.0f) * PumpAcceleration *
+                FMath::Sin(FMath::DegreesToRadians(Descent)) * Throttle * Dt;
         }
     }
     else if (Throttle < -0.02f)
@@ -919,7 +950,7 @@ void ABMXRiderPawn::UpdateGroundSpeed(float Dt)
     {
         SpeedCmPerSec -= Gravity * SlopeGravityScale * FMath::Sin(PitchRad) * Dt;
     }
-    SpeedCmPerSec = FMath::Clamp(SpeedCmPerSec, -MaxForwardSpeed, MaxForwardSpeed * 1.5f);
+    SpeedCmPerSec = FMath::Clamp(SpeedCmPerSec, -MaxForwardSpeed * 1.8f, MaxForwardSpeed * 1.8f);
     if (FMath::Abs(SpeedCmPerSec) < 1.5f) SpeedCmPerSec = 0.0f;
 }
 
@@ -949,8 +980,11 @@ void ABMXRiderPawn::LaunchIntoAir(float ExtraUpSpeed, float MinUpSpeed)
         // Straight up out of the quarter-pipe, then back in. Horizontal speed
         // is replaced by a slow drift back over the ramp (negative = toward
         // the ramp, since the actor still faces up the ramp).
+        // v0.3.1: the coping is near-vertical, so (almost) all of the speed
+        // goes upward. Using sin(chord pitch) here threw away ~35% of the
+        // speed every air, so airs shrank instead of building.
         VerticalSpeed = FMath::Clamp(
-            AlongSurface * FMath::Sin(PitchRad) * VertLaunchScale + ExtraUpSpeed * 0.5f,
+            AlongSurface * VertLaunchScale + ExtraUpSpeed * 0.3f,
             MinVertUpSpeed, MaxVertUpSpeed);
         const float PredictedAirTime = FMath::Max(0.4f, 2.0f * VerticalSpeed / Gravity);
         SpeedCmPerSec = -VertDriftCm / PredictedAirTime;
@@ -1022,7 +1056,10 @@ void ABMXRiderPawn::StartManual()
     if (bInManual || !bGrounded || bBailed || FMath::Abs(SpeedCmPerSec) < 120.0f) return;
     bInManual = true;
     ManualSeconds = 0.0f;
-    ManualBalance = 0.12f;
+    ManualBalance = 0.08f;
+    // W/S only balance once released after the manual starts, so W held
+    // from pedaling doesn't slam the nose down.
+    bManualInputArmed = FMath::Abs(ThrottleInput) < 0.2f;
     LandingLinkSeconds = 0.0f;
     AddComboTrick(TEXT("MANUAL"), 50);
 }
@@ -1046,11 +1083,14 @@ void ABMXRiderPawn::UpdateManual(float Dt)
         else
         {
             ManualSeconds += Dt;
-            // Self-amplifying tilt plus a little wobble; W pushes the nose
-            // down, S pulls it back.
-            const float Wobble = 0.35f * FMath::Sin(ManualSeconds * 2.7f) +
-                                 0.20f * FMath::Sin(ManualSeconds * 5.3f + 1.3f);
-            ManualBalance += (ManualBalance * 1.4f + Wobble * 0.8f - ThrottleInput * 2.2f) * Dt;
+            if (FMath::Abs(ThrottleInput) < 0.2f) bManualInputArmed = true;
+            const float BalanceInput = bManualInputArmed ? ThrottleInput : 0.0f;
+            // Slowly self-amplifying tilt plus a gentle wobble; W pushes the
+            // nose down, S pulls it back. Tuned so a tap corrects it.
+            const float Wobble = 0.25f * FMath::Sin(ManualSeconds * 2.3f) +
+                                 0.12f * FMath::Sin(ManualSeconds * 4.7f + 1.3f);
+            ManualBalance += (ManualBalance * ManualInstability + Wobble * 0.6f -
+                              BalanceInput * ManualControl) * Dt;
             ManualPointAccum += ManualPointsPerSecond * Dt;
             const int32 Whole = FMath::FloorToInt(ManualPointAccum);
             UnbankedPoints += Whole;
@@ -1079,11 +1119,14 @@ void ABMXRiderPawn::UpdateManual(float Dt)
 // ---------------------------------------------------------------------------
 void ABMXRiderPawn::UpdateAirRotation(float Dt)
 {
-    if (FMath::Abs(ThrottleInput) < 0.2f) bStickFlipArmed = true;
-    if (FMath::Abs(SteeringInput) < 0.2f) bStickSpinArmed = true;
-    // W (throttle +) leans forward = frontflip (nose down = negative pitch).
-    const float FlipIn = FMath::Clamp(FlipAxisInput - (bStickFlipArmed ? ThrottleInput : 0.0f), -1.0f, 1.0f);
-    const float SpinIn = FMath::Clamp(SpinAxisInput + (bStickSpinArmed ? SteeringInput : 0.0f), -1.0f, 1.0f);
+    // v0.3.1: keyboard rotates only with F/G (flip) and Q/E (spin), so W/S
+    // and A/D habits from riding never start a flip. The gamepad stick also
+    // rotates, once it has returned to centre after takeoff.
+    if (FMath::Abs(AirStickY) < 0.2f) bStickFlipArmed = true;
+    if (FMath::Abs(AirStickX) < 0.2f) bStickSpinArmed = true;
+    // Stick forward leans forward = frontflip (nose down = negative pitch).
+    const float FlipIn = FMath::Clamp(FlipAxisInput - (bStickFlipArmed ? AirStickY : 0.0f), -1.0f, 1.0f);
+    const float SpinIn = FMath::Clamp(SpinAxisInput + (bStickSpinArmed ? AirStickX : 0.0f), -1.0f, 1.0f);
 
     auto Drive = [Dt](float Input, float Rate, float Angle, float Snap, float& Velocity)
     {
