@@ -312,7 +312,7 @@ void ABMXRiderPawn::BeginPlay()
 {
     Super::BeginPlay();
     ResetBike();
-    ShowStatus(TEXT("v0.3.2  |  F/G FLIP  Q/E SPIN  SHIFT MANUAL  HOLD W DOWNHILL TO PUMP"), 6.0f);
+    ShowStatus(TEXT("v0.3.3  |  F/G FLIP  Q/E SPIN  SHIFT MANUAL  HOLD W DOWNHILL TO PUMP"), 6.0f);
 }
 
 void ABMXRiderPawn::PossessedBy(AController* NewController)
@@ -634,8 +634,19 @@ void ABMXRiderPawn::MoveBike(float Dt)
     {
         // This is the critical v0.1.8 change: use both wheel contacts at the
         // *next* position, rather than a single ray through the Pawn's centre.
-        const FBMXRidingSupport NextSupport = ProbeSupport(Start + HorizontalStep);
+        FBMXRidingSupport NextSupport = ProbeSupport(Start + HorizontalStep);
         if (NextSupport.HasContact()) bOnQuarterPipe = NextSupport.OnQuarterPipe();
+        // v0.3.3: going UP and the front wheel suddenly finds ground lower
+        // than the rear (e.g. the gap behind a dirt lip) = the front wheel
+        // is past the crest. Treat it as unsupported rather than averaging
+        // the gap floor into the ride height (that pulled the bike down into
+        // the lip and felt like getting stuck at the top).
+        const bool bClimbingForward = FloorPitchDeg > 8.0f && SpeedCmPerSec > 0.0f;
+        if (bClimbingForward && NextSupport.Front.bSupported && NextSupport.Rear.bSupported &&
+            NextSupport.Front.FloorZ + 15.0f < NextSupport.Rear.FloorZ)
+        {
+            NextSupport.Front.bSupported = false;
+        }
         // v0.1.9: A quarter-pipe has an OPEN lip, NOT a level deck.
         // In v0.1.8 the old launch condition almost never fired here:
         // the front wheel disappeared beyond the lip while the rear wheel
@@ -652,8 +663,14 @@ void ABMXRiderPawn::MoveBike(float Dt)
         const bool bFrontPastOpenLip =
             !NextSupport.Front.bSupported ||
             (NextSupport.Front.FloorZ + 85.0f < NextSupport.Rear.FloorZ);
+        // Quarter-pipes launch as soon as the front wheel clears the coping
+        // (vert air). Other lips (dirt, kickers) ride out on the rear wheel
+        // first - see the crest branch below.
         const bool bOpenQuarterPipeTakeoff =
-            bRearOnRisingRamp && bFrontPastOpenLip;
+            bRearOnRisingRamp && bFrontPastOpenLip && NextSupport.Rear.bQuarterPipe;
+        const bool bRearWheelCrest =
+            bClimbingForward && bRearOnRisingRamp && !NextSupport.Front.bSupported &&
+            !NextSupport.Rear.bQuarterPipe;
         const bool bDeckTransitionTakeoff =
             NextSupport.Front.bSupported && NextSupport.Rear.bSupported &&
             NextSupport.Front.Normal.Z > 0.97f &&
@@ -670,6 +687,38 @@ void ABMXRiderPawn::MoveBike(float Dt)
         {
             LaunchIntoAir(0.0f, 180.0f);
             JumpGrace = 0.13f;
+        }
+        else if (bRearWheelCrest)
+        {
+            // Front wheel is over the lip: carry on up the last part of the
+            // lip on the rear wheel, the bike pitched at the lip's angle, and
+            // take off when the rear wheel leaves the top (handled by the
+            // "left the surface" launch below). Smooth, and the takeoff now
+            // happens from the real lip height at the lip's real angle.
+            const float RearSlopeDeg = FMath::RadiansToDegrees(
+                FMath::Acos(FMath::Clamp(float(NextSupport.Rear.Normal.Z), 0.0f, 1.0f)));
+            FloorPitchDeg = FMath::FInterpTo(FloorPitchDeg, FMath::Clamp(RearSlopeDeg, 0.0f, 62.0f), Dt, 10.0f);
+            const float PitchRad = FMath::DegreesToRadians(FloorPitchDeg);
+            const float DesiredCenterZ = NextSupport.Rear.FloorZ +
+                63.0f * FMath::Sin(PitchRad) + (TireBottomBelowPawn + GroundClearance) * FMath::Cos(PitchRad);
+            const FVector Intended = Start + HorizontalStep;
+            FHitResult CrestLiftHit;
+            SetActorLocation(FVector(Start.X, Start.Y, FMath::Max(Start.Z, DesiredCenterZ) + 1.0f), true, &CrestLiftHit);
+            FHitResult CrestMoveHit;
+            bAttemptedGroundHorizontal = true;
+            SetActorLocation(FVector(Intended.X, Intended.Y, GetActorLocation().Z), true, &CrestMoveHit);
+            if (!CrestMoveHit.bBlockingHit)
+            {
+                bGrounded = true;
+                bCompletedGroundMotion = true;
+                VerticalSpeed = 0.0f;
+                AirTime = 0.0f;
+                StuckAirSeconds = 0.0f;
+                LeftSurfaceSeconds = 0.0f;
+                bFrontWheelContact = false;
+                bRearWheelContact = true;
+                RearWheelFloorZ = NextSupport.Rear.FloorZ;
+            }
         }
         else if (IsSupportReachable(Start, NextSupport))
         {

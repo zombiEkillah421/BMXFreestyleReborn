@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.3 — smooth dirt lip takeoffs
+
+- At a dirt lip the front wheel passed the top while the rear wheel was still low on the lip. The game averaged the gap floor into the ride height, pulling the bike down into the lip and launching it from halfway up at a shallow angle. That was the "stuck at the top" feeling.
+- Now, going uphill, a front wheel that finds lower ground than the rear counts as "past the crest". The bike keeps rolling up the last part of the lip on its rear wheel, pitched at the lip's angle, and takes off when the rear wheel leaves the top: from the real lip height, at the real lip angle (about 38°).
+- Quarter-pipes are unchanged (vert airs still trigger as the front wheel clears the coping).
+- Checked with a 2D trajectory calculation: 38–44 km/h lands the downslope with 1.0–1.4 s of air. The rolling start (41 km/h) is in the middle of that window.
+
+
 ## 0.3.2 — dirt line fixes
 
 From the v0.3.1 playtest video (vert airs and manual combos working):
