@@ -1,0 +1,55 @@
+#include "BMXHUD.h"
+#include "BMXRiderPawn.h"
+#include "Engine/Engine.h"
+#include "Engine/Canvas.h"
+#include "GameFramework/PlayerController.h"
+
+void ABMXHUD::DrawHUD()
+{
+    Super::DrawHUD();
+    if (!Canvas || !GEngine || !GetOwningPlayerController()) return;
+    const ABMXRiderPawn* Rider = Cast<ABMXRiderPawn>(GetOwningPlayerController()->GetPawn());
+    if (!Rider) return;
+    const float W = Canvas->ClipX;
+    const float H = Canvas->ClipY;
+    const FLinearColor Dark(0.025f,0.035f,0.055f,0.85f);
+    const FLinearColor White(0.96f,0.98f,1.0f,1.0f);
+    const FLinearColor Cyan(0.17f,0.92f,0.98f,1.0f);
+    const FLinearColor Gold(1.0f,0.78f,0.25f,1.0f);
+    DrawRect(Dark, 26, 24, 460, 192);
+    DrawRect(Cyan, 26, 24, 6, 192);
+    DrawText(TEXT("BMX FREESTYLE REBORN  |  PARK 01 - v0.1.9"), White, 46, 34, GEngine->GetSmallFont(), 1.05f, false);
+    DrawText(FString::Printf(TEXT("SCORE   %07d"), Rider->GetTotalScore()), Gold, 45, 64, GEngine->GetMediumFont(), 1.35f, false);
+    DrawText(FString::Printf(TEXT("SPEED  %02.0f KM/H"), Rider->GetSpeedKmh()), Cyan, 46, 104, GEngine->GetSmallFont(), 1.04f, false);
+    const FString MoveState = Rider->IsMovementBlocked() ? TEXT("BLOCKED") :
+        Rider->IsGrounded() ? TEXT("GROUND") : TEXT("AIR");
+    DrawText(FString::Printf(TEXT("INPUT W/S %+.1f   |   %s"), Rider->GetPedalInput(), *MoveState),
+             White, 46, 132, GEngine->GetSmallFont(), 0.95f, false);
+    DrawText(FString::Printf(TEXT("WHEELS  F:%s  R:%s  |  SLOPE %+.0f DEG"),
+        Rider->HasFrontWheelContact() ? TEXT("ON") : TEXT("OFF"),
+        Rider->HasRearWheelContact() ? TEXT("ON") : TEXT("OFF"),
+        Rider->GetPitchDegrees()), Cyan, 46, 157, GEngine->GetSmallFont(), 0.90f, false);
+    DrawText(Rider->IsMovementBlocked() ?
+             FString::Printf(TEXT("HIT: %s"), *Rider->GetBlockerName()) :
+             TEXT("DUAL WHEEL CONTACT  |  ARCADE RAMP PHYSICS"),
+             Rider->IsMovementBlocked() ? Gold : White,
+             46, 182, GEngine->GetSmallFont(), 0.90f, false);
+    if (Rider->HasCombo())
+    {
+        DrawRect(Dark, W * 0.5f - 245, H - 230, 490, 120);
+        DrawRect(Gold, W * 0.5f - 245, H - 230, 490, 5);
+        DrawText(FString::Printf(TEXT("COMBO  %d POINTS  |  x%.2f"), Rider->GetComboPoints(), Rider->GetComboMultiplier()), Gold,
+                 W * 0.5f - 215, H - 210, GEngine->GetMediumFont(), 1.2f, false);
+        DrawText(Rider->GetComboNames(), White, W * 0.5f - 215, H - 167, GEngine->GetSmallFont(), 1.05f, false);
+    }
+    if (!Rider->GetStatusMessage().IsEmpty())
+    {
+        DrawRect(Dark, W*0.5f - 240, H*0.23f, 480, 46);
+        DrawText(Rider->GetStatusMessage(), Cyan, W*0.5f - 215, H*0.23f + 10, GEngine->GetMediumFont(), 1.0f, false);
+    }
+    DrawRect(Dark, 26, H - 92, W - 52, 67);
+    DrawText(TEXT("W/S PEDAL/BRAKE   A/D STEER   MOUSE CAMERA   SPACE HOP   B BARSPIN   T TAILWHIP"), White,
+             42, H - 81, GEngine->GetSmallFont(), 0.94f, false);
+    DrawText(TEXT("Q/E 360 SPINS    F/G FLIPS    C RECENTER CAMERA    R RESET    |    GAMEPAD SUPPORTED"), Cyan,
+             42, H - 52, GEngine->GetSmallFont(), 0.94f, false);
+}

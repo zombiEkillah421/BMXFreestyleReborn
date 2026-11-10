@@ -1,0 +1,26 @@
+# Unreal generated / local folders
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+.vs/
+.vscode/
+.idea/
+
+# Generated project files (recreate via right-click .uproject > Generate Visual Studio project files)
+*.sln
+*.slnx
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+
+# Build output
+*.pdb
+*.dll
+*.exe
+*.lib
+
+# Local patch backups (Git history replaces these)
+BMX_patch_backups/

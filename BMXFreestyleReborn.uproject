@@ -1,0 +1,19 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.8",
+	"Category": "Games",
+	"Description": "Original arcade BMX freestyle game prototype: procedural park, riding, camera, tricks and combo scoring.",
+	"Modules": [
+		{
+			"Name": "BMXFreestyleReborn",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ProceduralMeshComponent",
+			"Enabled": true
+		}
+	]
+}
