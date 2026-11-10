@@ -79,6 +79,8 @@ public:
     float GetComboMultiplier() const;
     FString GetComboNames() const;
     FString GetStatusMessage() const { return StatusMessage; }
+    bool IsVertAir() const { return bVertAir; }
+    bool IsDebugHUDVisible() const { return bShowDebugHUD; }
 
 private:
     UPROPERTY(VisibleAnywhere, Category="BMX|Collision")
@@ -118,6 +120,11 @@ private:
     FBMXRidingSupport ProbeSupport(const FVector& PawnCenter, float ProbeHeight = 96.0f) const;
     bool IsSupportReachable(const FVector& Origin, const FBMXRidingSupport& Support) const;
     void MoveBike(float Dt);
+    void UpdateGroundSpeed(float Dt);
+    // Leaves the current surface, splitting along-surface speed into
+    // horizontal travel and upward velocity. Steep quarter-pipe exits
+    // become vert airs that turn the rider back into the ramp.
+    void LaunchIntoAir(float ExtraUpSpeed, float MinUpSpeed);
     void UpdateCamera(float Dt);
     void UpdateTricks(float Dt);
     void ResetVisuals();
@@ -140,6 +147,7 @@ private:
     void Backflip();
     void Frontflip();
     void RecenterCamera();
+    void ToggleDebugHUD();
 
     UPROPERTY(EditAnywhere, Category="BMX|Tuning")
     float MaxForwardSpeed = 1370.0f; // cm/s, about 49 km/h
@@ -149,6 +157,30 @@ private:
     float SteeringRateDeg = 115.0f;
     UPROPERTY(EditAnywhere, Category="BMX|Tuning")
     float HopSpeed = 615.0f;
+    UPROPERTY(EditAnywhere, Category="BMX|Tuning")
+    float ReverseSpeed = 420.0f;
+    // Rolling resistance when not pedaling (cm/s^2). Also limits speed above max.
+    UPROPERTY(EditAnywhere, Category="BMX|Tuning")
+    float CoastDrag = 240.0f;
+    // How strongly slopes speed you up / slow you down (1.0 = real gravity).
+    UPROPERTY(EditAnywhere, Category="BMX|Tuning")
+    float SlopeGravityScale = 0.85f;
+    // Share of uphill speed that becomes upward velocity at a ramp lip.
+    UPROPERTY(EditAnywhere, Category="BMX|Tuning")
+    float LaunchLiftScale = 0.85f;
+    // Leaving a ramp steeper than this (stored chord pitch) triggers a vert air.
+    UPROPERTY(EditAnywhere, Category="BMX|Vert")
+    float VertLaunchPitchDeg = 30.0f; // tabletop wedges are ~25 deg
+    UPROPERTY(EditAnywhere, Category="BMX|Vert")
+    float VertLaunchScale = 0.80f;
+    UPROPERTY(EditAnywhere, Category="BMX|Vert")
+    float MinVertUpSpeed = 300.0f;
+    UPROPERTY(EditAnywhere, Category="BMX|Vert")
+    float MaxVertUpSpeed = 1050.0f;
+    // How far (cm) the rider drifts back over the ramp during a vert air,
+    // so both wheels come down on the transition instead of the coping.
+    UPROPERTY(EditAnywhere, Category="BMX|Vert")
+    float VertDriftCm = 60.0f;
 
     float ThrottleInput = 0.0f;
     float SteeringInput = 0.0f;
@@ -175,6 +207,12 @@ private:
     float CameraYawDeg = 0.0f;
     float CameraPitchDeg = -12.0f;
     float CameraIdleSeconds = 0.0f;
+    bool bVertAir = false;
+    float VertAirElapsed = 0.0f;
+    float VertAirTurnSeconds = 0.5f;
+    float VertAirYawDeg = 0.0f;
+    float VertAirLaunchPitchDeg = 0.0f;
+    bool bShowDebugHUD = true;
     FVector ResetLocation = FVector(-150.0f, -1150.0f, 60.0f);
     FRotator ResetRotation = FRotator(0.0f, 180.0f, 0.0f);
 

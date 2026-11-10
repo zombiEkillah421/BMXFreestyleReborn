@@ -135,7 +135,10 @@ void ABMXTrainingPark::AddRamp(const FVector& Origin, const FRotator& Rotation,
     const int32 Steps = bCurved ? 30 : 8;
     const float HalfWidth = Width * 0.5f;
     const float BottomZ = -14.0f; // slightly below the ground pad (top = Z 0)
-    constexpr float MaxAngle = PI / 4.0f; // lower lip gradient, rideable upper transition
+    // v0.2.0: 60-degree arc parameter. With the park's height/length ratios the
+    // tops finish at ~58-62 degrees: steep enough for vert airs, while the
+    // compact rider collider still clears the face (needs < ~66 degrees).
+    constexpr float MaxAngle = PI / 3.0f;
     const float SinAngle = FMath::Sin(MaxAngle);
     const float Rise = 1.0f - FMath::Cos(MaxAngle);
 
@@ -217,7 +220,7 @@ void ABMXTrainingPark::AddRamp(const FVector& Origin, const FRotator& Rotation,
         // Do not ignore the park actor: the trace must be able to hit this ramp.
         // Checking the actual hit component avoids mistaking the floor for a ramp.
         const bool bHit = World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility);
-        UE_LOG(LogTemp, Log, TEXT("[BMX PARK v0.1.9] Ramp at %s; triangles=%d; trace=%s; target=%s"),
+        UE_LOG(LogTemp, Log, TEXT("[BMX PARK v0.2.0] Ramp at %s; triangles=%d; trace=%s; target=%s"),
                *Origin.ToString(), Triangles.Num() / 3,
                bHit ? TEXT("HIT") : TEXT("MISS"),
                (bHit && Hit.GetComponent() == Mesh) ? TEXT("RAMP") : TEXT("OTHER"));
@@ -273,5 +276,5 @@ void ABMXTrainingPark::BeginPlay()
     AddBox(FVector(-2990,0,100), FVector(20,6000,200), FRotator::ZeroRotator, WallMaterial);
     AddBox(FVector(2990,0,100), FVector(20,6000,200), FRotator::ZeroRotator, WallMaterial);
 
-    UE_LOG(LogTemp, Log, TEXT("[BMX PARK v0.1.9] Inward-facing quarter-pipe ramps, aligned approach lanes, and matching collision initialized."));
+    UE_LOG(LogTemp, Log, TEXT("[BMX PARK v0.2.0] Steep quarter-pipes (vert), tabletop, ledge and rails initialized."));
 }

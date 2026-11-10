@@ -183,6 +183,9 @@ void ABMXRiderPawn::UpdateVisualMotion(float Dt)
     {
         HandlePivot->SetRelativeRotation(FRotator(0,SteeringInput * 22.0f,0));
     }
+    // Vert air: the whole rider + bike visibly turns 180 degrees while the
+    // actor keeps its heading; the heading itself flips on landing.
+    VisualRoot->SetRelativeRotation(FRotator(0.0f, VertAirYawDeg, 0.0f));
 }
 
 void ABMXRiderPawn::BeginPlay()
@@ -219,7 +222,10 @@ void ABMXRiderPawn::SetupPlayerInputComponent(UInputComponent* Input)
     Input->BindAction(TEXT("Frontflip"), IE_Pressed, this, &ABMXRiderPawn::Frontflip);
     Input->BindAction(TEXT("Reset"), IE_Pressed, this, &ABMXRiderPawn::ResetBike);
     Input->BindAction(TEXT("RecenterCamera"), IE_Pressed, this, &ABMXRiderPawn::RecenterCamera);
+    Input->BindAction(TEXT("ToggleDebug"), IE_Pressed, this, &ABMXRiderPawn::ToggleDebugHUD);
 }
+
+void ABMXRiderPawn::ToggleDebugHUD() { bShowDebugHUD = !bShowDebugHUD; }
 
 void ABMXRiderPawn::SetThrottle(float Value) { ThrottleInput = FMath::Clamp(Value,-1.0f,1.0f); }
 void ABMXRiderPawn::SetSteering(float Value) { SteeringInput = FMath::Clamp(Value,-1.0f,1.0f); }
@@ -268,8 +274,8 @@ bool ABMXRiderPawn::ProbeWheel(const FVector& PawnCenter, float ForwardOffset,
     if (!World->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params)) return false;
 
     // Sidewalls and underside faces do not count as riding surfaces.
-    // 0.40 still allows the relatively steep original-style quarter-pipes.
-    if (Hit.ImpactNormal.Z < 0.40f || Hit.bStartPenetrating) return false;
+    // 0.35 (~69 degrees) allows the ~62 degree tops of the v0.2 quarter-pipes.
+    if (Hit.ImpactNormal.Z < 0.35f || Hit.bStartPenetrating) return false;
     Contact.bSupported = true;
     Contact.FloorZ = Hit.ImpactPoint.Z;
     Contact.Normal = Hit.ImpactNormal;
@@ -345,7 +351,8 @@ void ABMXRiderPawn::Tick(float DeltaSeconds)
     }
     bMovementBlocked = bBlockedThisFrame;
     LastBlockerName = FrameBlocker;
-    const float MeasuredSpeed = FVector::Dist2D(Before, GetActorLocation()) /
+    // Full 3D travel, so climbing a ramp or falling shows real speed.
+    const float MeasuredSpeed = FVector::Dist(Before, GetActorLocation()) /
         FMath::Max(0.001f, TotalDt);
     ActualSpeedCmPerSec = FMath::FInterpTo(ActualSpeedCmPerSec, MeasuredSpeed, TotalDt, 8.0f);
     if (!bBailed)
@@ -380,21 +387,27 @@ void ABMXRiderPawn::MoveBike(float Dt)
         return Component->GetName();
     };
 
-    const float TargetSpeed = ThrottleInput > 0.02f ? MaxForwardSpeed * ThrottleInput :
-                              ThrottleInput < -0.02f ? 420.0f * ThrottleInput : 0.0f;
-    const float ChangeRate = FMath::Abs(ThrottleInput) > 0.02f ? Acceleration :
-                             (bGrounded ? 320.0f : 40.0f);
-    SpeedCmPerSec = FMath::FInterpConstantTo(SpeedCmPerSec, TargetSpeed, Dt, ChangeRate);
-    if (FMath::Abs(SpeedCmPerSec) < 1.5f) SpeedCmPerSec = 0.0f;
+    // v0.2.0: On the ground SpeedCmPerSec is speed ALONG the riding surface.
+    // In the air it is horizontal speed only and pedaling has no effect.
+    if (bGrounded) UpdateGroundSpeed(Dt);
 
-    const float TurningStrength = FMath::Clamp(FMath::Abs(SpeedCmPerSec) / 450.0f, 0.18f, 1.0f);
-    const float DirectionSign = SpeedCmPerSec >= 0.0f ? 1.0f : -1.0f;
-    AddActorWorldRotation(FRotator(0.0f,
-        SteeringInput * SteeringRateDeg * Dt * TurningStrength * DirectionSign *
-        (bGrounded ? 1.0f : 0.35f), 0.0f));
+    // Vert airs are committed: the auto-180 handles direction instead.
+    if (!bVertAir)
+    {
+        const float TurningStrength = FMath::Clamp(FMath::Abs(SpeedCmPerSec) / 450.0f, 0.18f, 1.0f);
+        const float DirectionSign = SpeedCmPerSec >= 0.0f ? 1.0f : -1.0f;
+        AddActorWorldRotation(FRotator(0.0f,
+            SteeringInput * SteeringRateDeg * Dt * TurningStrength * DirectionSign *
+            (bGrounded ? 1.0f : 0.35f), 0.0f));
+    }
 
     const FVector Start = GetActorLocation();
-    const FVector RequestedHorizontal = GetActorForwardVector() * SpeedCmPerSec * Dt;
+    // On a slope only the cos(pitch) share of surface speed is horizontal;
+    // the ground snap supplies the matching rise. Previously the full speed
+    // was applied horizontally, so climbing a ramp made the bike FASTER.
+    const float HorizontalScale = bGrounded ?
+        FMath::Max(0.2f, FMath::Cos(FMath::DegreesToRadians(FloorPitchDeg))) : 1.0f;
+    const FVector RequestedHorizontal = GetActorForwardVector() * SpeedCmPerSec * HorizontalScale * Dt;
 
     // Check the wheel surface in advance. A quarter-pipe lip is NOT a solid
     // wall even when a sweep touches its vertical closure triangle.
@@ -467,21 +480,17 @@ void ABMXRiderPawn::MoveBike(float Dt)
             NextSupport.Front.Normal.Z > 0.97f &&
             NextSupport.Rear.Normal.Z < 0.83f &&
             NextSupport.Front.FloorZ > NextSupport.Rear.FloorZ + 24.0f;
+        // v0.2.0: An open quarter-pipe lip launches at any rolling speed
+        // (slow = small vert air). Rolling up onto a tabletop deck still
+        // needs real speed so you can ride onto the deck slowly.
         const bool bLaunchAtLip =
-            bGrounded && SpeedCmPerSec > 525.0f &&
-            FloorPitchDeg > 8.0f &&
-            (bOpenQuarterPipeTakeoff || bDeckTransitionTakeoff);
+            bGrounded && FloorPitchDeg > 8.0f &&
+            ((bOpenQuarterPipeTakeoff && SpeedCmPerSec > 150.0f) ||
+             (bDeckTransitionTakeoff && SpeedCmPerSec > 525.0f));
         if (bLaunchAtLip)
         {
-            bGrounded = false;
+            LaunchIntoAir(0.0f, 180.0f);
             JumpGrace = 0.13f;
-            AirTime = 0.0f;
-            VerticalSpeed = FMath::Clamp(SpeedCmPerSec *
-                FMath::Sin(FMath::DegreesToRadians(FloorPitchDeg)) * 0.72f,
-                220.0f, 900.0f);
-            ShowStatus(TEXT("RAMP LIP - AIRBORNE"), 0.75f);
-            bFrontWheelContact = false;
-            bRearWheelContact = false;
         }
         else if (IsSupportReachable(Start, NextSupport))
         {
@@ -534,7 +543,7 @@ void ABMXRiderPawn::MoveBike(float Dt)
                 if (Actual.Front.bSupported && Actual.Rear.bSupported)
                 {
                     FloorPitchDeg = FMath::FInterpTo(FloorPitchDeg,
-                        FMath::Clamp(Actual.SurfacePitchDegrees(), -55.0f, 55.0f), Dt, 11.0f);
+                        FMath::Clamp(Actual.SurfacePitchDegrees(), -62.0f, 62.0f), Dt, 11.0f);
                 }
                 else
                 {
@@ -573,16 +582,10 @@ void ABMXRiderPawn::MoveBike(float Dt)
         }
         if (!bCompletedGroundMotion && !bLaunchAtLip)
         {
-            // Leave the ramp as an actual airborne transition. Carry some
+            // Leave the surface as an actual airborne transition. Carry
             // upward momentum from the last riding pitch for arcade-style lips.
-            bGrounded = false;
-            AirTime = 0.0f;
             LeftSurfaceSeconds = 0.0f;
-            VerticalSpeed = FMath::Clamp(FMath::Max(0.0f,
-                FMath::Sin(FMath::DegreesToRadians(FloorPitchDeg)) *
-                FMath::Max(0.0f, SpeedCmPerSec) * 0.75f), 0.0f, 850.0f);
-            bFrontWheelContact = false;
-            bRearWheelContact = false;
+            LaunchIntoAir(0.0f, 0.0f);
         }
     }
 
@@ -595,6 +598,19 @@ void ABMXRiderPawn::MoveBike(float Dt)
     // AIR: move horizontally and vertically in separate swept operations so
     // a side collision cannot freeze gravity (the old midair lock).
     AirTime += Dt;
+    if (bVertAir)
+    {
+        VertAirElapsed += Dt;
+        const float TurnProgress = FMath::Clamp(VertAirElapsed / FMath::Max(0.1f, VertAirTurnSeconds), 0.0f, 1.0f);
+        VertAirYawDeg = 180.0f * FMath::InterpEaseInOut(0.0f, 1.0f, TurnProgress, 2.0f);
+        // Nose up at takeoff, level at the apex, nose down the ramp at landing.
+        FloorPitchDeg = VertAirLaunchPitchDeg * FMath::Cos(PI * TurnProgress);
+    }
+    else
+    {
+        // Ordinary jumps: the bike levels out gradually in the air.
+        FloorPitchDeg = FMath::FInterpTo(FloorPitchDeg, 0.0f, Dt, 1.5f);
+    }
     const FVector BeforeHorizontal = GetActorLocation();
     FHitResult HorizontalHit;
     const FVector AirHorizontalStep = bAttemptedGroundHorizontal ? FVector::ZeroVector : HorizontalStep;
@@ -638,12 +654,32 @@ void ABMXRiderPawn::MoveBike(float Dt)
     {
         FHitResult LandHit;
         SetActorLocation(FVector(EndPosition.X, EndPosition.Y, LandingZ), true, &LandHit);
+        float LandedPitch = LandingSupport.SurfacePitchDegrees();
+        if (bVertAir)
+        {
+            // Complete the 180: the actor now faces down the ramp. The wheel
+            // probes are symmetric (+/-63 cm), so the measured surface is the
+            // same; only its pitch sign and the travel direction flip.
+            AddActorWorldRotation(FRotator(0.0f, 180.0f, 0.0f));
+            SpeedCmPerSec = -SpeedCmPerSec;
+            LandedPitch = -LandedPitch;
+            bVertAir = false;
+            VertAirYawDeg = 0.0f;
+            CameraIdleSeconds = 10.0f; // let the camera swing round behind the rider
+        }
+        // Keep momentum: project the air velocity onto the landing slope.
+        // Coming down a ramp face turns the fall into forward speed, so a
+        // vert air drops back in with pace instead of from a standstill.
+        const float LandedPitchRad = FMath::DegreesToRadians(FMath::Clamp(LandedPitch, -62.0f, 62.0f));
+        SpeedCmPerSec = FMath::Clamp(
+            SpeedCmPerSec * FMath::Cos(LandedPitchRad) + VerticalSpeed * FMath::Sin(LandedPitchRad),
+            -MaxForwardSpeed, MaxForwardSpeed * 1.5f);
         bGrounded = true;
         VerticalSpeed = 0.0f;
         AirTime = 0.0f;
         StuckAirSeconds = 0.0f;
         LeftSurfaceSeconds = 0.0f;
-        FloorPitchDeg = FMath::Clamp(LandingSupport.SurfacePitchDegrees(), -55.0f, 55.0f);
+        FloorPitchDeg = FMath::Clamp(LandedPitch, -62.0f, 62.0f);
         LandingCooldown = 0.13f;
         if (bHasActiveTrick || !TrickQueue.IsEmpty())
             Bail(TEXT("INCOMPLETE TRICK - COMBO LOST"));
@@ -663,6 +699,14 @@ void ABMXRiderPawn::MoveBike(float Dt)
             FMath::Abs(EndPosition.Z - LandingZ) < 32.0f)
         {
             SetActorLocation(FVector(EndPosition.X, EndPosition.Y, LandingZ), false);
+            if (bVertAir)
+            {
+                AddActorWorldRotation(FRotator(0.0f, 180.0f, 0.0f));
+                SpeedCmPerSec = -SpeedCmPerSec;
+                bVertAir = false;
+                VertAirYawDeg = 0.0f;
+            }
+            FloorPitchDeg = 0.0f;
             bGrounded = true;
             VerticalSpeed = 0.0f;
             StuckAirSeconds = 0.0f;
@@ -680,14 +724,97 @@ void ABMXRiderPawn::MoveBike(float Dt)
         Bail(TEXT("OUT OF BOUNDS"));
 }
 
+void ABMXRiderPawn::UpdateGroundSpeed(float Dt)
+{
+    constexpr float Gravity = 980.0f;
+    const float PitchRad = FMath::DegreesToRadians(FloorPitchDeg);
+    if (ThrottleInput > 0.02f)
+    {
+        const float Target = MaxForwardSpeed * ThrottleInput;
+        if (SpeedCmPerSec < Target)
+        {
+            // Pedaling uphill is weaker, so a quarter-pipe has to be hit with
+            // speed carried from the flat rather than pedaled up.
+            const float PedalScale = FloorPitchDeg > 0.0f ?
+                FMath::Clamp(FMath::Square(FMath::Cos(PitchRad)), 0.25f, 1.0f) : 1.0f;
+            SpeedCmPerSec = FMath::Min(Target, SpeedCmPerSec + Acceleration * PedalScale * Dt);
+        }
+        else
+        {
+            // Faster than pedaling allows (e.g. dropping in): only drag slows
+            // you. Previously holding W while going downhill BRAKED the bike.
+            SpeedCmPerSec = FMath::FInterpConstantTo(SpeedCmPerSec, Target, Dt, CoastDrag);
+        }
+    }
+    else if (ThrottleInput < -0.02f)
+    {
+        SpeedCmPerSec = FMath::FInterpConstantTo(SpeedCmPerSec, ReverseSpeed * ThrottleInput, Dt, Acceleration);
+    }
+    else
+    {
+        SpeedCmPerSec = FMath::FInterpConstantTo(SpeedCmPerSec, 0.0f, Dt, CoastDrag);
+    }
+
+    // Gravity along the slope: uphill slows you, downhill speeds you up, and
+    // a stalled bike on a steep face rolls back down (fakie). Gentle slopes
+    // below the drag threshold hold the bike still.
+    if (FMath::Abs(FloorPitchDeg) > 1.5f)
+    {
+        SpeedCmPerSec -= Gravity * SlopeGravityScale * FMath::Sin(PitchRad) * Dt;
+    }
+    SpeedCmPerSec = FMath::Clamp(SpeedCmPerSec, -MaxForwardSpeed, MaxForwardSpeed * 1.5f);
+    if (FMath::Abs(SpeedCmPerSec) < 1.5f) SpeedCmPerSec = 0.0f;
+}
+
+void ABMXRiderPawn::LaunchIntoAir(float ExtraUpSpeed, float MinUpSpeed)
+{
+    constexpr float Gravity = 980.0f;
+    const float PitchRad = FMath::DegreesToRadians(FloorPitchDeg);
+    const float AlongSurface = SpeedCmPerSec;
+    const bool bVert = FloorPitchDeg >= VertLaunchPitchDeg && AlongSurface > 0.0f;
+
+    bGrounded = false;
+    AirTime = 0.0f;
+    bFrontWheelContact = false;
+    bRearWheelContact = false;
+
+    if (bVert)
+    {
+        // Straight up out of the quarter-pipe, then back in. Horizontal speed
+        // is replaced by a slow drift back over the ramp (negative = toward
+        // the ramp, since the actor still faces up the ramp).
+        VerticalSpeed = FMath::Clamp(
+            AlongSurface * FMath::Sin(PitchRad) * VertLaunchScale + ExtraUpSpeed * 0.5f,
+            MinVertUpSpeed, MaxVertUpSpeed);
+        const float PredictedAirTime = FMath::Max(0.4f, 2.0f * VerticalSpeed / Gravity);
+        SpeedCmPerSec = -VertDriftCm / PredictedAirTime;
+        bVertAir = true;
+        VertAirElapsed = 0.0f;
+        VertAirYawDeg = 0.0f;
+        VertAirLaunchPitchDeg = FloorPitchDeg;
+        // Finish turning well before touchdown so the landing is clean.
+        VertAirTurnSeconds = FMath::Max(0.3f, PredictedAirTime * 0.6f);
+        ShowStatus(TEXT("VERT AIR!"), 0.9f);
+        return;
+    }
+
+    float Up = AlongSurface * FMath::Sin(PitchRad);
+    if (Up > 0.0f) Up *= LaunchLiftScale;
+    VerticalSpeed = FMath::Clamp(Up + ExtraUpSpeed, MinUpSpeed, 1200.0f);
+    SpeedCmPerSec = AlongSurface * FMath::Cos(PitchRad);
+    if (FloorPitchDeg > 8.0f && Up > 150.0f)
+        ShowStatus(TEXT("RAMP LIP - AIRBORNE"), 0.75f);
+}
+
 void ABMXRiderPawn::Hop()
 {
     if (bBailed || !bGrounded) return;
-    bGrounded = false;
-    AirTime = 0.0f;
+    // A hop on a slope keeps the slope's momentum (and can start a vert air
+    // near the top of a quarter-pipe).
+    LaunchIntoAir(HopSpeed + FMath::Clamp(FMath::Abs(SpeedCmPerSec)*0.055f,0.0f,65.0f),
+                  HopSpeed * 0.6f);
     JumpGrace = 0.22f;
-    VerticalSpeed = HopSpeed + FMath::Clamp(FMath::Abs(SpeedCmPerSec)*0.055f,0.0f,65.0f);
-    FloorPitchDeg *= 0.5f;
+    if (!bVertAir) FloorPitchDeg *= 0.5f;
 }
 
 void ABMXRiderPawn::AddTrick(const TCHAR* Label, EBMXTrickType Type,
@@ -741,7 +868,14 @@ void ABMXRiderPawn::UpdateTricks(float Dt)
     }
     if (Progress >= 1.0f)
     {
-        UnbankedPoints += ActiveTrick.Points;
+        // Repeating a trick inside one combo is worth less each time
+        // (100%, 50%, 25%...), rewarding variety like classic BMX games.
+        int32 Repeats = 0;
+        for (const FString& Done : CompletedComboTricks)
+        {
+            if (Done == ActiveTrick.Name) ++Repeats;
+        }
+        UnbankedPoints += FMath::Max(10, ActiveTrick.Points >> FMath::Min(Repeats, 4));
         CompletedComboTricks.Add(ActiveTrick.Name);
         ResetVisuals();
         BeginNextTrick();
@@ -785,6 +919,8 @@ void ABMXRiderPawn::Bail(const FString& Reason)
     SpeedCmPerSec = 0.0f;
     ActualSpeedCmPerSec = 0.0f;
     VerticalSpeed = 0.0f;
+    bVertAir = false;
+    VertAirYawDeg = 0.0f;
     bHasActiveTrick = false;
     TrickQueue.Reset();
     CompletedComboTricks.Reset();
@@ -814,6 +950,10 @@ void ABMXRiderPawn::ResetBike()
     ThrottleInput = 0.0f;
     SteeringInput = 0.0f;
     FloorPitchDeg = 0.0f;
+    bVertAir = false;
+    VertAirElapsed = 0.0f;
+    VertAirYawDeg = 0.0f;
+    if (VisualRoot) VisualRoot->SetRelativeRotation(FRotator::ZeroRotator);
     WheelRotationDeg = 0.0f;
     PedalPhase = 0.0f;
     CompletedComboTricks.Reset();

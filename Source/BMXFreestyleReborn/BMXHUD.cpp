@@ -16,24 +16,31 @@ void ABMXHUD::DrawHUD()
     const FLinearColor White(0.96f,0.98f,1.0f,1.0f);
     const FLinearColor Cyan(0.17f,0.92f,0.98f,1.0f);
     const FLinearColor Gold(1.0f,0.78f,0.25f,1.0f);
-    DrawRect(Dark, 26, 24, 460, 192);
-    DrawRect(Cyan, 26, 24, 6, 192);
-    DrawText(TEXT("BMX FREESTYLE REBORN  |  PARK 01 - v0.1.9"), White, 46, 34, GEngine->GetSmallFont(), 1.05f, false);
+    const bool bDebug = Rider->IsDebugHUDVisible();
+    const float PanelHeight = bDebug ? 192.0f : 104.0f;
+    DrawRect(Dark, 26, 24, 460, PanelHeight);
+    DrawRect(Cyan, 26, 24, 6, PanelHeight);
+    DrawText(TEXT("BMX FREESTYLE REBORN  |  PARK 01 - v0.2.0"), White, 46, 34, GEngine->GetSmallFont(), 1.05f, false);
     DrawText(FString::Printf(TEXT("SCORE   %07d"), Rider->GetTotalScore()), Gold, 45, 64, GEngine->GetMediumFont(), 1.35f, false);
-    DrawText(FString::Printf(TEXT("SPEED  %02.0f KM/H"), Rider->GetSpeedKmh()), Cyan, 46, 104, GEngine->GetSmallFont(), 1.04f, false);
-    const FString MoveState = Rider->IsMovementBlocked() ? TEXT("BLOCKED") :
-        Rider->IsGrounded() ? TEXT("GROUND") : TEXT("AIR");
-    DrawText(FString::Printf(TEXT("INPUT W/S %+.1f   |   %s"), Rider->GetPedalInput(), *MoveState),
-             White, 46, 132, GEngine->GetSmallFont(), 0.95f, false);
-    DrawText(FString::Printf(TEXT("WHEELS  F:%s  R:%s  |  SLOPE %+.0f DEG"),
-        Rider->HasFrontWheelContact() ? TEXT("ON") : TEXT("OFF"),
-        Rider->HasRearWheelContact() ? TEXT("ON") : TEXT("OFF"),
-        Rider->GetPitchDegrees()), Cyan, 46, 157, GEngine->GetSmallFont(), 0.90f, false);
-    DrawText(Rider->IsMovementBlocked() ?
-             FString::Printf(TEXT("HIT: %s"), *Rider->GetBlockerName()) :
-             TEXT("DUAL WHEEL CONTACT  |  ARCADE RAMP PHYSICS"),
-             Rider->IsMovementBlocked() ? Gold : White,
-             46, 182, GEngine->GetSmallFont(), 0.90f, false);
+    if (bDebug)
+    {
+        // Diagnostic readout for playtest recordings. TAB / gamepad View toggles it.
+        DrawText(FString::Printf(TEXT("SPEED  %02.0f KM/H"), Rider->GetSpeedKmh()), Cyan, 46, 104, GEngine->GetSmallFont(), 1.04f, false);
+        const FString MoveState = Rider->IsMovementBlocked() ? TEXT("BLOCKED") :
+            Rider->IsGrounded() ? TEXT("GROUND") :
+            Rider->IsVertAir() ? TEXT("VERT AIR") : TEXT("AIR");
+        DrawText(FString::Printf(TEXT("INPUT W/S %+.1f   |   %s"), Rider->GetPedalInput(), *MoveState),
+                 White, 46, 132, GEngine->GetSmallFont(), 0.95f, false);
+        DrawText(FString::Printf(TEXT("WHEELS  F:%s  R:%s  |  SLOPE %+.0f DEG"),
+            Rider->HasFrontWheelContact() ? TEXT("ON") : TEXT("OFF"),
+            Rider->HasRearWheelContact() ? TEXT("ON") : TEXT("OFF"),
+            Rider->GetPitchDegrees()), Cyan, 46, 157, GEngine->GetSmallFont(), 0.90f, false);
+        DrawText(Rider->IsMovementBlocked() ?
+                 FString::Printf(TEXT("HIT: %s"), *Rider->GetBlockerName()) :
+                 TEXT("TAB: HIDE DEBUG INFO"),
+                 Rider->IsMovementBlocked() ? Gold : White,
+                 46, 182, GEngine->GetSmallFont(), 0.90f, false);
+    }
     if (Rider->HasCombo())
     {
         DrawRect(Dark, W * 0.5f - 245, H - 230, 490, 120);
@@ -50,6 +57,6 @@ void ABMXHUD::DrawHUD()
     DrawRect(Dark, 26, H - 92, W - 52, 67);
     DrawText(TEXT("W/S PEDAL/BRAKE   A/D STEER   MOUSE CAMERA   SPACE HOP   B BARSPIN   T TAILWHIP"), White,
              42, H - 81, GEngine->GetSmallFont(), 0.94f, false);
-    DrawText(TEXT("Q/E 360 SPINS    F/G FLIPS    C RECENTER CAMERA    R RESET    |    GAMEPAD SUPPORTED"), Cyan,
+    DrawText(TEXT("Q/E 360 SPINS    F/G FLIPS    C CAMERA    R RESET    TAB DEBUG    |    HIT QUARTERS FAST FOR VERT AIRS"), Cyan,
              42, H - 52, GEngine->GetSmallFont(), 0.94f, false);
 }
