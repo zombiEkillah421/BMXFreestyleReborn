@@ -33,15 +33,28 @@ if not exist "%UE_ROOT%\Engine\Build\BatchFiles\Build.bat" (
 
 REM Forward slashes avoid the "G:\\" path mangling seen with Build.bat.
 set "PROJ_FWD=%PROJ:\=/%"
-set "UBT=%UE_ROOT%\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe"
+set "UBT_DLL=%UE_ROOT%\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll"
 
-echo Building with "%UE_ROOT%" ... this can take a few minutes.
-if exist "%UBT%" (
-    "%UBT%" BMXFreestyleRebornEditor Win64 Development -Project="%PROJ_FWD%" -WaitMutex > "%~dp0BuildLog.txt" 2>&1
-) else (
-    call "%UE_ROOT%\Engine\Build\BatchFiles\Build.bat" BMXFreestyleRebornEditor Win64 Development -Project="%PROJ_FWD%" -WaitMutex > "%~dp0BuildLog.txt" 2>&1
+REM Use the .NET that ships with Unreal (UE 5.8 needs .NET 10, which most
+REM PCs don't have installed). Prefer the win-x64 copy.
+set "DOTNET="
+for /r "%UE_ROOT%\Engine\Binaries\ThirdParty\DotNet" %%D in (dotnet.exe) do (
+    if exist "%%D" (
+        echo %%D | findstr /i "win-x64" >nul && set "DOTNET=%%D"
+        if not defined DOTNET set "DOTNET=%%D"
+    )
 )
 
+echo Building with "%UE_ROOT%" ... this can take a few minutes.
+if defined DOTNET if exist "%UBT_DLL%" (
+    echo Using bundled .NET: "%DOTNET%"
+    "%DOTNET%" "%UBT_DLL%" BMXFreestyleRebornEditor Win64 Development -Project="%PROJ_FWD%" -WaitMutex > "%~dp0BuildLog.txt" 2>&1
+    goto :result
+)
+echo Bundled .NET not found - falling back to Build.bat
+call "%UE_ROOT%\Engine\Build\BatchFiles\Build.bat" BMXFreestyleRebornEditor Win64 Development -Project="%PROJ_FWD%" -WaitMutex > "%~dp0BuildLog.txt" 2>&1
+
+:result
 if errorlevel 1 (
     echo.
     echo BUILD FAILED. Send BuildLog.txt (in this folder^) to Claude.
