@@ -31,8 +31,16 @@ if not exist "%UE_ROOT%\Engine\Build\BatchFiles\Build.bat" (
     exit /b 1
 )
 
+REM Forward slashes avoid the "G:\\" path mangling seen with Build.bat.
+set "PROJ_FWD=%PROJ:\=/%"
+set "UBT=%UE_ROOT%\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe"
+
 echo Building with "%UE_ROOT%" ... this can take a few minutes.
-call "%UE_ROOT%\Engine\Build\BatchFiles\Build.bat" BMXFreestyleRebornEditor Win64 Development "-Project=%PROJ%" -WaitMutex > "%~dp0BuildLog.txt" 2>&1
+if exist "%UBT%" (
+    "%UBT%" BMXFreestyleRebornEditor Win64 Development -Project="%PROJ_FWD%" -WaitMutex > "%~dp0BuildLog.txt" 2>&1
+) else (
+    call "%UE_ROOT%\Engine\Build\BatchFiles\Build.bat" BMXFreestyleRebornEditor Win64 Development -Project="%PROJ_FWD%" -WaitMutex > "%~dp0BuildLog.txt" 2>&1
+)
 
 if errorlevel 1 (
     echo.
