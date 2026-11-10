@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.5 — dirt gaps shortened
+
+- Riders were coming up short on the dirt landings. The gap is now 2.0 m (was 2.8 m). By 2D trajectory check, 36–41 km/h lands on the downslope with 1.0–1.3 s of air, about 32 km/h lands on the deck, and slower rides up the 30° backside.
+- The dirt line's rolling start is now 39 km/h, the middle of that window. Pedal a little if short, ease off if long.
+
+
 ## 0.3.4 — snappier bunny hops
 
 - Bunny hops were floaty: a full charge went about 3.8 m up with about 1.8 s of air. Hops off flat ground now use 1.6x gravity and a lower pop (tap 0.75x, full 1.1x). A tap is about 0.8 m with 0.65 s of air, a full charge about 1.6 m with 0.9 s. Hops off ramps and lips, dirt jumps and vert airs are unchanged. Tuning is under BMX|Tricks: HopGravityScale, MinHopScale, MaxHopScale.

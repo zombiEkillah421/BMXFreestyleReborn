@@ -313,7 +313,7 @@ void ABMXRiderPawn::BeginPlay()
 {
     Super::BeginPlay();
     ResetBike();
-    ShowStatus(TEXT("v0.3.4  |  F/G FLIP  Q/E SPIN  SHIFT MANUAL  HOLD W DOWNHILL TO PUMP"), 6.0f);
+    ShowStatus(TEXT("v0.3.5  |  F/G FLIP  Q/E SPIN  SHIFT MANUAL  HOLD W DOWNHILL TO PUMP"), 6.0f);
 }
 
 void ABMXRiderPawn::PossessedBy(AController* NewController)
@@ -1550,9 +1550,9 @@ void ABMXRiderPawn::ResetToDirtLine()
     // standstill left you too slow, landing short in the gap).
     ResetLocation = FVector(-2500.0f, -2350.0f, 60.0f);
     ResetRotation = FRotator(0.0f, 0.0f, 0.0f);
-    SpawnRollSpeed = 1150.0f;
+    SpawnRollSpeed = 1080.0f; // ~39 km/h, middle of the 36-41 km/h landing window
     ResetBike();
-    ShowStatus(TEXT("DIRT LINE  |  40-45 KM/H LANDS THE DOWNSLOPE - EASE OFF W IF YOU OVERSHOOT"), 4.0f);
+    ShowStatus(TEXT("DIRT LINE  |  36-41 KM/H LANDS THE DOWNSLOPE - PEDAL IF SHORT, EASE OFF IF LONG"), 4.0f);
 }
 void ABMXRiderPawn::ResetToPark()
 {

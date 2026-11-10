@@ -295,9 +295,9 @@ void ABMXTrainingPark::AddProfileMound(const FVector& Origin, float Yaw, float W
 }
 
 // One dirt jump set heading +X: a 130 cm lip (curving up to ~40 degrees), a
-// 280 cm gap, then a long landing: 30-degree backside, short deck, rounded
+// 200 cm gap, then a long landing: 30-degree backside, short deck, rounded
 // knuckle and a two-stage downslope. Tuned (2D trajectory check) so roughly
-// 40-45 km/h approach lands on the downslope, 38 km/h on the deck; faster
+// 36-41 km/h approach lands on the downslope, ~32 km/h on the deck; faster
 // rolls onto the flat run-out, slower cases the backside and rides over.
 void ABMXTrainingPark::AddDirtJump(float LipStartX, float Y)
 {
@@ -320,7 +320,8 @@ void ABMXTrainingPark::AddDirtJump(float LipStartX, float Y)
         FVector2D(350.0f, 148.0f), FVector2D(380.0f, 141.0f), FVector2D(420.0f, 128.0f),
         FVector2D(670.0f, 66.0f), FVector2D(880.0f, 12.0f), FVector2D(930.0f, 2.0f),
         FVector2D(970.0f, 0.0f) };
-    AddProfileMound(FVector(LipStartX + LipLength + 280.0f, Y, 0.0f), 0.0f, 340.0f, Landing, DirtMaterial);
+    // v0.3.5: gap 280 -> 200 cm (riders were coming up short).
+    AddProfileMound(FVector(LipStartX + LipLength + 200.0f, Y, 0.0f), 0.0f, 340.0f, Landing, DirtMaterial);
 }
 
 void ABMXTrainingPark::BeginPlay()
