@@ -20,13 +20,14 @@ void ABMXHUD::DrawHUD()
     const float PanelHeight = bDebug ? 192.0f : 104.0f;
     DrawRect(Dark, 26, 24, 460, PanelHeight);
     DrawRect(Cyan, 26, 24, 6, PanelHeight);
-    DrawText(TEXT("BMX FREESTYLE REBORN  |  PARK 01 - v0.3.5"), White, 46, 34, GEngine->GetSmallFont(), 1.05f, false);
+    DrawText(TEXT("BMX FREESTYLE REBORN  |  PARK 01 - v0.4.0"), White, 46, 34, GEngine->GetSmallFont(), 1.05f, false);
     DrawText(FString::Printf(TEXT("SCORE   %07d"), Rider->GetTotalScore()), Gold, 45, 64, GEngine->GetMediumFont(), 1.35f, false);
     if (bDebug)
     {
         // Diagnostic readout for playtest recordings. TAB / gamepad View toggles it.
         DrawText(FString::Printf(TEXT("SPEED  %02.0f KM/H"), Rider->GetSpeedKmh()), Cyan, 46, 104, GEngine->GetSmallFont(), 1.04f, false);
         const FString MoveState = Rider->IsMovementBlocked() ? TEXT("BLOCKED") :
+            Rider->IsGrinding() ? TEXT("GRIND") :
             Rider->IsInManual() ? TEXT("MANUAL") :
             Rider->IsRidingFakie() ? TEXT("FAKIE") :
             Rider->IsGrounded() ? TEXT("GROUND") :
@@ -63,6 +64,19 @@ void ABMXHUD::DrawHUD()
         DrawRect(FLinearColor(0.2f,0.75f,0.35f,0.9f), MeterX + MeterW * 0.3f, MeterY, MeterW * 0.4f, 10);
         DrawRect(White, MeterX + MeterW * 0.5f * (1.0f + Balance) - 3, MeterY - 6, 6, 22);
         DrawText(TEXT("MANUAL  -  W NOSE DOWN / S PULL BACK"), White, MeterX, MeterY - 24, GEngine->GetSmallFont(), 0.9f, false);
+    }
+    if (Rider->IsGrinding())
+    {
+        // Grind balance: keep the marker centred with A / D.
+        const float MeterW = 320.0f;
+        const float MeterX = W * 0.5f - MeterW * 0.5f;
+        const float MeterY = H * 0.62f;
+        const float Balance = FMath::Clamp(Rider->GetGrindBalance(), -1.0f, 1.0f);
+        DrawRect(Dark, MeterX - 6, MeterY - 26, MeterW + 12, 50);
+        DrawRect(FLinearColor(0.8f,0.2f,0.15f,0.9f), MeterX, MeterY, MeterW, 10);
+        DrawRect(FLinearColor(0.2f,0.75f,0.35f,0.9f), MeterX + MeterW * 0.3f, MeterY, MeterW * 0.4f, 10);
+        DrawRect(Gold, MeterX + MeterW * 0.5f * (1.0f + Balance) - 3, MeterY - 6, 6, 22);
+        DrawText(TEXT("GRIND  -  A / D TO BALANCE,  SPACE TO HOP OFF"), White, MeterX, MeterY - 24, GEngine->GetSmallFont(), 0.9f, false);
     }
     if (!Rider->GetStatusMessage().IsEmpty())
     {

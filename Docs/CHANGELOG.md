@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0 — grinds
+
+- **Grindable edges:** both rails, both long edges of the ledge, and both long top edges of the tabletop deck. The park registers each as a grind segment.
+- **Lock on:** drop onto an edge while roughly upright and within about 50° of its direction, with the pegs within 45 cm sideways. It's checked every physics substep so a fast drop can't miss. Flips and spins done in the air before the grind are scored as you lock on (a 180 locks on facing the other way).
+- **Grind types**, picked by the direction held as you land: nothing for double peg (150), A for feeble (200, bike leaned), D for smith (200), S for icepick (250, front up, rear peg) and W for toothpick (250, front peg, nose down).
+- **Balance meter:** A/D keep it centred. Too far either way and you "FELL OFF THE RAIL". A direction held to pick the grind only starts balancing once released.
+- **Scoring:** grinding scores 80 points/s. Grind friction slowly bleeds speed. Below about 4 km/h you stall out; at the end of the edge you pop off.
+- **Space** hops off the grind. The combo continues, so you can chain into air tricks, another grind or a manual on landing.
+- **HUD:** GRIND state and a grind balance meter.
+
+Not yet compiled in UE 5.8: run `BUILD_EDITOR.bat`. See `Docs/V040_PLAYTEST.md`.
+
+
 ## 0.3.5 — dirt gaps shortened
 
 - Riders were coming up short on the dirt landings. The gap is now 2.0 m (was 2.8 m). By 2D trajectory check, 36–41 km/h lands on the downslope with 1.0–1.3 s of air, about 32 km/h lands on the deck, and slower rides up the 30° backside.

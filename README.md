@@ -3,7 +3,7 @@
 An original arcade BMX freestyle game for Windows PC, built in **Unreal Engine 5.8 (C++)**.
 Inspired by the feel of 2001-era arcade BMX games: responsive riding, big airs, trick combos.
 
-**Current version:** v0.3.5 — early playable prototype (see `Docs/CHANGELOG.md`).
+**Current version:** v0.4.0 — early playable prototype (see `Docs/CHANGELOG.md`).
 
 ## What's in the prototype
 
@@ -13,6 +13,7 @@ Inspired by the feel of 2001-era arcade BMX games: responsive riding, big airs, 
 - **Vert airs**: hit a quarter-pipe with speed and you launch straight up, turn 180° in the air and drop back into the ramp.
 - **Free air rotation**: flip (F/G) and spin (Q/E) however far you like (backflips, frontflips, 180s, 360s, doubles) and combine them with any bike/body trick.
 - **10 style tricks**: barspin, tailwhip, no-hander, superman, can-can, X-up, turndown, tabletop, nothing, tuck no-hander. Hold tricks score more the longer you hold them.
+- **Grinds** on rails, ledge edges and the tabletop deck edges: double peg, feeble, smith, icepick and toothpick, with a balance meter. Hop off into more tricks.
 - **Manuals** link combos between landings, with a balance meter. Land a 180 and you ride away **fakie**.
 - **Charged bunny hop**: hold Space to load up for a bigger pop.
 - **Pumping**: hold W while dropping down a transition to gain speed, so back-and-forth airs on the quarter-pipes build higher.
@@ -39,6 +40,7 @@ Inspired by the feel of 2001-era arcade BMX games: responsive riding, big airs, 
 | Camera | Mouse | Right stick |
 | Bunny hop (hold to charge) | Space | A |
 | Manual (hold; W/S balance) | Left Shift | LT |
+| **Grind:** hop onto a rail/ledge edge, lined up | hold nothing / A / D / S / W as you land = double peg / feeble / smith / icepick / toothpick; A/D balance; Space hops off | Left stick |
 | **In the air:** flip / spin | F / G (front / back) · Q / E (left / right) | Left stick |
 | Barspin / Tailwhip | B / T | X / Y |
 | No-hander / Superman | J / K | LB / RB |
@@ -68,7 +70,7 @@ Tuning values are exposed under **BMX|Tuning**, **BMX|Vert** and **BMX|Tricks** 
 - The bike isn't physically simulated. It uses arcade speed plus wheel-ray ground following.
 - Tricks rotate primitive components. There's no skeletal animation yet.
 - Rails are solid obstacles only. There's no grind system yet.
-- No grinds yet (next on the list), and no menus, audio, career mode or saving.
+- Grinds are straight edges only (rails, ledge, deck); no quarter-pipe coping grinds yet. No menus, audio, career mode or saving.
 
 ## Originality
 

@@ -11,6 +11,8 @@
 #include "GameFramework/PlayerController.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Math/RotationMatrix.h"
+#include "EngineUtils.h"
+#include "BMXTrainingPark.h"
 
 ABMXRiderPawn::ABMXRiderPawn()
 {
@@ -295,12 +297,15 @@ void ABMXRiderPawn::UpdateVisualMotion(float Dt)
     HandlePivot->SetRelativeRotation(FRotator(0.0f, BarYaw, 0.0f));
 
     // ---- Whole-rider orientation: slope + flips + spins + manual ----
-    const float Lean = (bGrounded ? -SteeringInput * NormalizedSpeed * 8.0f : 0.0f);
-    const float ManualPitch = ManualAlpha * (16.0f + 10.0f * ManualBalance) + HopLiftPitchDeg;
+    const float Lean = bGrinding ? (GrindPoseRoll + GrindBalance * 16.0f) :
+                       (bGrounded ? -SteeringInput * NormalizedSpeed * 8.0f : 0.0f);
+    const float ManualPitch = ManualAlpha * (16.0f + 10.0f * ManualBalance) + HopLiftPitchDeg +
+                              (bGrinding ? GrindPosePitch : 0.0f);
     // Manuals and the bunny-hop front lift pivot round the REAR axle, so the
     // back wheel stays planted while the front comes up.
-    const FVector RearAxle(-63.0f, 0.0f, -20.0f);
-    const FVector ManualOffset = RearAxle - FRotator(ManualPitch, 0.0f, 0.0f).RotateVector(RearAxle);
+    // (A nose-down toothpick grind pivots round the FRONT axle instead.)
+    const FVector AxlePivot(ManualPitch >= 0.0f ? -63.0f : 63.0f, 0.0f, -20.0f);
+    const FVector ManualOffset = AxlePivot - FRotator(ManualPitch, 0.0f, 0.0f).RotateVector(AxlePivot);
     TrickPivot->SetRelativeLocationAndRotation(FVector(0.0f, 0.0f, 55.0f) + ManualOffset,
         FRotator(FloorPitchDeg + FlipAngleDeg + ManualPitch, SpinAngleDeg, Lean));
 
@@ -313,7 +318,7 @@ void ABMXRiderPawn::BeginPlay()
 {
     Super::BeginPlay();
     ResetBike();
-    ShowStatus(TEXT("v0.3.5  |  F/G FLIP  Q/E SPIN  SHIFT MANUAL  HOLD W DOWNHILL TO PUMP"), 6.0f);
+    ShowStatus(TEXT("v0.4.0  |  HOP ONTO RAILS & LEDGES TO GRIND  -  HOLD A/D/W/S AS YOU LAND FOR DIFFERENT GRINDS"), 6.0f);
 }
 
 void ABMXRiderPawn::PossessedBy(AController* NewController)
@@ -557,9 +562,18 @@ void ABMXRiderPawn::Tick(float DeltaSeconds)
     const FVector Before = GetActorLocation();
     bool bBlockedThisFrame = false;
     FString FrameBlocker;
+    GrindCooldown = FMath::Max(0.0f, GrindCooldown - TotalDt);
     for (int32 Step = 0; Step < NumSteps; ++Step)
     {
+        if (bGrinding)
+        {
+            UpdateGrind(Dt);
+            if (bBailed) break;
+            continue;
+        }
         MoveBike(Dt);
+        // Checked every substep so a fast drop can't pass through a rail.
+        if (!bGrounded && !bBailed) TryStartGrind();
         if (bMovementBlocked)
         {
             bBlockedThisFrame = true;
@@ -575,7 +589,7 @@ void ABMXRiderPawn::Tick(float DeltaSeconds)
     ActualSpeedCmPerSec = FMath::FInterpTo(ActualSpeedCmPerSec, MeasuredSpeed, TotalDt, 8.0f);
     if (!bBailed)
     {
-        if (!bGrounded) UpdateAirRotation(TotalDt);
+        if (!bGrounded && !bGrinding) UpdateAirRotation(TotalDt);
         UpdateStyleTrick(TotalDt);
         UpdateVisualMotion(TotalDt);
     }
@@ -1102,6 +1116,12 @@ void ABMXRiderPawn::LaunchIntoAir(float ExtraUpSpeed, float MinUpSpeed)
 // ---------------------------------------------------------------------------
 void ABMXRiderPawn::HopPressed()
 {
+    if (bGrinding)
+    {
+        // Pop off the rail: the combo carries into the air.
+        ExitGrind(HopSpeed * 0.85f);
+        return;
+    }
     if (bBailed || !bGrounded) return;
     bHopCharging = true;
     HopCharge = 0.0f;
@@ -1255,7 +1275,7 @@ void ABMXRiderPawn::UpdateAirRotation(float Dt)
 // ---------------------------------------------------------------------------
 void ABMXRiderPawn::StylePressed(EBMXStyleTrick Trick)
 {
-    if (bBailed || bGrounded || Trick == EBMXStyleTrick::None) return;
+    if (bBailed || bGrounded || bGrinding || Trick == EBMXStyleTrick::None) return;
     if (ActiveStyle != EBMXStyleTrick::None)
     {
         const BMXStyle::FDef Current = BMXStyle::Get(ActiveStyle);
@@ -1423,6 +1443,176 @@ void ABMXRiderPawn::AfterCleanLanding()
     }
 }
 
+// ---------------------------------------------------------------------------
+// Grinds (v0.4.0). Drop onto a rail / ledge edge / deck edge roughly lined up
+// and you lock on. The direction held as you land picks the grind; A/D keep
+// your balance; Space hops off with the combo still going.
+// ---------------------------------------------------------------------------
+void ABMXRiderPawn::TryStartGrind()
+{
+    if (bGrinding || bGrounded || bBailed || bVertAir || GrindCooldown > 0.0f) return;
+    if (VerticalSpeed > 60.0f) return; // only while dropping onto it
+    if (ActiveStyle != EBMXStyleTrick::None || StylePoseAlpha > 0.5f) return;
+    // Must be roughly upright - no locking on halfway through a flip or spin.
+    const float FlipResidual = FlipAngleDeg - FMath::RoundToFloat(FlipAngleDeg / 360.0f) * 360.0f;
+    const float SpinResidual = SpinAngleDeg - FMath::RoundToFloat(SpinAngleDeg / 180.0f) * 180.0f;
+    if (FMath::Abs(FlipResidual) > LandingToleranceDeg || FMath::Abs(SpinResidual) > LandingToleranceDeg) return;
+
+    if (!CachedPark.IsValid())
+    {
+        for (TActorIterator<ABMXTrainingPark> It(GetWorld()); It; ++It)
+        {
+            CachedPark = *It;
+            break;
+        }
+        if (!CachedPark.IsValid()) return;
+    }
+
+    const FVector Pegs = GetActorLocation() - FVector(0.0f, 0.0f, GrindPegHeight);
+    FVector Travel = GetActorForwardVector() * (SpeedCmPerSec >= 0.0f ? 1.0f : -1.0f);
+    Travel.Z = 0.0f;
+    Travel = Travel.GetSafeNormal();
+    // A 180 spin about to be resolved means the rider will face the other way.
+    if (FMath::Abs(FMath::RoundToInt(SpinAngleDeg / 180.0f)) % 2 == 1) Travel = -Travel;
+
+    const TArray<FBMXGrindSegment>& Segments = CachedPark->GetGrindSegments();
+    int32 Best = INDEX_NONE;
+    float BestSide = GrindSnapDistance;
+    float BestAlong = 0.0f;
+    for (int32 Index = 0; Index < Segments.Num(); ++Index)
+    {
+        const FVector AB = Segments[Index].End - Segments[Index].Start;
+        const float Length = AB.Size();
+        if (Length < 60.0f) continue;
+        const FVector Axis = AB / Length;
+        const float Along = FVector::DotProduct(Pegs - Segments[Index].Start, Axis);
+        if (Along < 20.0f || Along > Length - 20.0f) continue;
+        const FVector Delta = Pegs - (Segments[Index].Start + Axis * Along);
+        const float Side = FVector(Delta.X, Delta.Y, 0.0f).Size();
+        if (Side > BestSide || Delta.Z < -30.0f || Delta.Z > 35.0f) continue;
+        const FVector AxisFlat = FVector(Axis.X, Axis.Y, 0.0f).GetSafeNormal();
+        if (FMath::Abs(FVector::DotProduct(Travel, AxisFlat)) < 0.64f) continue; // within ~50 degrees
+        Best = Index;
+        BestSide = Side;
+        BestAlong = Along;
+    }
+    if (Best == INDEX_NONE) return;
+
+    // Score any flips/spins from the air before the grind and settle the
+    // heading (a 180 turns the bike round). Upright was checked above.
+    float UnusedPitch = 0.0f;
+    if (!ResolveLanding(UnusedPitch)) return;
+
+    const FBMXGrindSegment& Segment = Segments[Best];
+    const FVector AB = Segment.End - Segment.Start;
+    GrindLength = AB.Size();
+    GrindAxis = AB / GrindLength;
+    GrindStart = Segment.Start;
+    const FVector AxisFlat = FVector(GrindAxis.X, GrindAxis.Y, 0.0f).GetSafeNormal();
+    FVector Heading = GetActorForwardVector() * (SpeedCmPerSec >= 0.0f ? 1.0f : -1.0f);
+    Heading.Z = 0.0f;
+    const float Alignment = FVector::DotProduct(Heading.GetSafeNormal(), AxisFlat);
+    GrindDir = Alignment >= 0.0f ? 1.0f : -1.0f;
+    GrindDistance = BestAlong;
+    GrindSpeed = FMath::Max(250.0f, FMath::Abs(SpeedCmPerSec) * FMath::Abs(Alignment));
+
+    // The direction you hold as you lock on picks the grind.
+    FString GrindName = TEXT("DOUBLE PEG");
+    int32 GrindPoints = 150;
+    GrindPosePitch = 0.0f;
+    GrindPoseRoll = 0.0f;
+    if (SteeringInput < -0.4f)      { GrindName = TEXT("FEEBLE");    GrindPoints = 200; GrindPoseRoll = -18.0f; }
+    else if (SteeringInput > 0.4f)  { GrindName = TEXT("SMITH");     GrindPoints = 200; GrindPoseRoll = 18.0f; }
+    else if (ThrottleInput < -0.4f) { GrindName = TEXT("ICEPICK");   GrindPoints = 250; GrindPosePitch = 30.0f; }
+    else if (ThrottleInput > 0.4f)  { GrindName = TEXT("TOOTHPICK"); GrindPoints = 250; GrindPosePitch = -24.0f; }
+    AddComboTrick(GrindName + TEXT(" GRIND"), GrindPoints);
+
+    bGrinding = true;
+    bGrounded = false;
+    VerticalSpeed = 0.0f;
+    AirTime = 0.0f;
+    StuckAirSeconds = 0.0f;
+    bHopAir = false;
+    bHopLeveling = false;
+    HopLiftPitchDeg = 0.0f;
+    bInManual = false;
+    LandingLinkSeconds = 0.0f;
+    GrindSeconds = 0.0f;
+    GrindPointAccum = 0.0f;
+    GrindBalance = (FMath::FRand() - 0.5f) * 0.2f;
+    // A/D held to pick the grind only start balancing once released.
+    bGrindInputArmed = FMath::Abs(SteeringInput) < 0.2f;
+    SpeedCmPerSec = GrindSpeed;
+    FloorPitchDeg = FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(float(GrindAxis.Z), -1.0f, 1.0f))) * GrindDir;
+    SetActorRotation(FRotator(0.0f, (AxisFlat * GrindDir).Rotation().Yaw, 0.0f));
+    SetActorLocation(GrindStart + GrindAxis * GrindDistance + FVector(0.0f, 0.0f, GrindPegHeight), false);
+    ShowStatus(FString::Printf(TEXT("%s GRIND  |  A/D BALANCE  -  SPACE HOPS OFF"), *GrindName), 1.6f);
+}
+
+void ABMXRiderPawn::UpdateGrind(float Dt)
+{
+    GrindSeconds += Dt;
+    // Friction plus gravity along a sloped edge (none on the current park).
+    const float SlopeSin = float(GrindAxis.Z) * GrindDir;
+    GrindSpeed -= (GrindFriction + 980.0f * SlopeGravityScale * SlopeSin) * Dt;
+    GrindDistance += GrindDir * GrindSpeed * Dt;
+
+    if (FMath::Abs(SteeringInput) < 0.2f) bGrindInputArmed = true;
+    const float BalanceInput = bGrindInputArmed ? SteeringInput : 0.0f;
+    const float Wobble = 0.30f * FMath::Sin(GrindSeconds * 2.1f) + 0.15f * FMath::Sin(GrindSeconds * 5.1f + 0.7f);
+    // Leaning right (positive) tips further right; A pulls you back left.
+    GrindBalance += (GrindBalance * GrindInstability + Wobble * 0.5f + BalanceInput * GrindControl) * Dt;
+
+    GrindPointAccum += GrindPointsPerSecond * Dt;
+    const int32 Whole = FMath::FloorToInt(GrindPointAccum);
+    UnbankedPoints += Whole;
+    GrindPointAccum -= float(Whole);
+
+    if (FMath::Abs(GrindBalance) > 1.0f)
+    {
+        Bail(TEXT("FELL OFF THE RAIL"));
+        return;
+    }
+    if (GrindSpeed < 120.0f)
+    {
+        ExitGrind(0.0f);
+        ShowStatus(TEXT("STALLED OUT"), 1.0f);
+        return;
+    }
+    if (GrindDistance < 0.0f || GrindDistance > GrindLength)
+    {
+        // Ran off the end: a little pop so the bike clears the edge.
+        ExitGrind(160.0f);
+        return;
+    }
+    SetActorLocation(GrindStart + GrindAxis * GrindDistance + FVector(0.0f, 0.0f, GrindPegHeight), false);
+    SpeedCmPerSec = GrindSpeed;
+}
+
+void ABMXRiderPawn::ExitGrind(float UpSpeed)
+{
+    if (!bGrinding) return;
+    bGrinding = false;
+    bGrounded = false;
+    VerticalSpeed = UpSpeed;
+    AirTime = 0.0f;
+    JumpGrace = 0.15f;
+    GrindCooldown = 0.35f; // don't instantly re-lock onto the same edge
+    SpeedCmPerSec = GrindSpeed * FVector(GrindAxis.X, GrindAxis.Y, 0.0f).Size();
+    FloorPitchDeg = 0.0f;
+    GrindPosePitch = 0.0f;
+    GrindPoseRoll = 0.0f;
+    GrindBalance = 0.0f;
+    FlipAngleDeg = 0.0f;
+    SpinAngleDeg = 0.0f;
+    FlipVelocityDeg = 0.0f;
+    SpinVelocityDeg = 0.0f;
+    bStickFlipArmed = false;
+    bStickSpinArmed = false;
+    bFrontWheelContact = false;
+    bRearWheelContact = false;
+}
+
 void ABMXRiderPawn::ResetVisuals()
 {
     TrickPivot->SetRelativeLocationAndRotation(FVector(0.0f, 0.0f, 55.0f), FRotator(FloorPitchDeg,0,0));
@@ -1467,6 +1657,11 @@ void ABMXRiderPawn::Bail(const FString& Reason)
     VerticalSpeed = 0.0f;
     bVertAir = false;
     VertAirYawDeg = 0.0f;
+    bGrinding = false;
+    GrindPosePitch = 0.0f;
+    GrindPoseRoll = 0.0f;
+    GrindBalance = 0.0f;
+    GrindCooldown = 0.5f;
     ActiveStyle = EBMXStyleTrick::None;
     PoseStyle = EBMXStyleTrick::None;
     StylePoseAlpha = 0.0f;
@@ -1536,6 +1731,11 @@ void ABMXRiderPawn::ResetBike()
     FlipVelocityDeg = 0.0f;
     SpinVelocityDeg = 0.0f;
     bOnQuarterPipe = false;
+    bGrinding = false;
+    GrindPosePitch = 0.0f;
+    GrindPoseRoll = 0.0f;
+    GrindBalance = 0.0f;
+    GrindCooldown = 0.0f;
     SetActorLocationAndRotation(ResetLocation, ResetRotation, false, nullptr, ETeleportType::TeleportPhysics);
     SpeedCmPerSec = SpawnRollSpeed; // rolling start on the dirt line, 0 in the park
     ResetVisuals();

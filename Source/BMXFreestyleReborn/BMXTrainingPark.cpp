@@ -89,8 +89,40 @@ void ABMXTrainingPark::AddBox(const FVector& Center, const FVector& Dimensions,
     Box->RegisterComponent();
 }
 
+void ABMXTrainingPark::AddGrindEdge(const FVector& LocalStart, const FVector& LocalEnd, const TCHAR* Label)
+{
+    FBMXGrindSegment Segment;
+    Segment.Start = GetActorTransform().TransformPosition(LocalStart);
+    Segment.End = GetActorTransform().TransformPosition(LocalEnd);
+    Segment.Label = Label;
+    GrindSegments.Add(Segment);
+}
+
+void ABMXTrainingPark::AddBoxGrindEdges(const FVector& Center, const FVector& Dimensions, const TCHAR* Label)
+{
+    const FVector Half = Dimensions * 0.5f;
+    const float TopZ = Center.Z + Half.Z;
+    const bool bLongAlongX = Dimensions.X >= Dimensions.Y;
+    for (const float Side : { -1.0f, 1.0f })
+    {
+        if (bLongAlongX)
+        {
+            AddGrindEdge(FVector(Center.X - Half.X, Center.Y + Side * Half.Y, TopZ),
+                         FVector(Center.X + Half.X, Center.Y + Side * Half.Y, TopZ), Label);
+        }
+        else
+        {
+            AddGrindEdge(FVector(Center.X + Side * Half.X, Center.Y - Half.Y, TopZ),
+                         FVector(Center.X + Side * Half.X, Center.Y + Half.Y, TopZ), Label);
+        }
+    }
+}
+
 void ABMXTrainingPark::AddRail(const FVector& Center, float Length, float Height)
 {
+    // Grind line along the top of the 8 cm-thick rail tube.
+    AddGrindEdge(Center + FVector(-Length * 0.5f, 0.0f, Height + 4.0f),
+                 Center + FVector(Length * 0.5f, 0.0f, Height + 4.0f), TEXT("RAIL"));
     if (!CylinderMesh) return;
     UStaticMeshComponent* Rail = NewObject<UStaticMeshComponent>(this);
     Rail->SetupAttachment(RootComponent);
@@ -362,9 +394,11 @@ void ABMXTrainingPark::BeginPlay()
     // Tabletop: matching wedge heights at each end and a visible solid deck.
     AddRamp(FVector(-150, -100, 0), FRotator::ZeroRotator, 360, 550, 165, false);
     AddBox(FVector(485, -100, 82.5f), FVector(550, 550, 165), FRotator::ZeroRotator, LedgeMaterial);
+    AddBoxGrindEdges(FVector(485, -100, 82.5f), FVector(550, 550, 165), TEXT("DECK EDGE"));
     AddRamp(FVector(1120, -100, 0), FRotator(0, 180, 0), 360, 550, 165, false);
 
     AddBox(FVector(-1550, 650, 40), FVector(540, 300, 80), FRotator::ZeroRotator, LedgeMaterial);
+    AddBoxGrindEdges(FVector(-1550, 650, 40), FVector(540, 300, 80), TEXT("LEDGE"));
     AddRail(FVector(-300, 650, 0), 440, 98);
     AddRail(FVector(800, 800, 0), 350, 80);
 

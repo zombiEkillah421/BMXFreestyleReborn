@@ -4,6 +4,8 @@
 #include "GameFramework/Pawn.h"
 #include "BMXRiderPawn.generated.h"
 
+class ABMXTrainingPark;
+
 class UCapsuleComponent;
 class USceneComponent;
 class UStaticMesh;
@@ -83,6 +85,8 @@ public:
     FString GetStatusMessage() const { return StatusMessage; }
     bool IsVertAir() const { return bVertAir; }
     bool IsInManual() const { return bInManual; }
+    bool IsGrinding() const { return bGrinding; }
+    float GetGrindBalance() const { return GrindBalance; }
     float GetManualBalance() const { return ManualBalance; }
     bool IsRidingFakie() const { return bGrounded && SpeedCmPerSec < -40.0f; }
     float GetFlipAngle() const { return FlipAngleDeg; }
@@ -148,6 +152,10 @@ private:
     // round for 180s / vert airs. Returns false after calling Bail().
     bool ResolveLanding(float& InOutLandedPitch);
     void AfterCleanLanding();
+    // v0.4.0 grinds
+    void TryStartGrind();
+    void UpdateGrind(float Dt);
+    void ExitGrind(float UpSpeed);
     void StartManual();
     void EndManual(bool bBank);
     void AddComboTrick(const FString& Name, int32 Points);
@@ -253,6 +261,20 @@ private:
     // A tap waits this long for the front to come up before popping.
     UPROPERTY(EditAnywhere, Category="BMX|Tricks")
     float HopFrontLiftSeconds = 0.08f;
+    // Grinds: how close (cm, sideways) the pegs must come to an edge to lock on.
+    UPROPERTY(EditAnywhere, Category="BMX|Grind")
+    float GrindSnapDistance = 45.0f;
+    // Pawn centre height above the grind edge (pegs sit at axle height).
+    UPROPERTY(EditAnywhere, Category="BMX|Grind")
+    float GrindPegHeight = 22.0f;
+    UPROPERTY(EditAnywhere, Category="BMX|Grind")
+    float GrindFriction = 45.0f;
+    UPROPERTY(EditAnywhere, Category="BMX|Grind")
+    float GrindPointsPerSecond = 80.0f;
+    UPROPERTY(EditAnywhere, Category="BMX|Grind")
+    float GrindInstability = 1.0f;
+    UPROPERTY(EditAnywhere, Category="BMX|Grind")
+    float GrindControl = 1.7f;
 
     float ThrottleInput = 0.0f;
     float SteeringInput = 0.0f;
@@ -330,6 +352,23 @@ private:
     bool bHopLeveling = false;
     float HopLiftPitchDeg = 0.0f;
     bool bHopAir = false;
+
+    // Grind state.
+    TWeakObjectPtr<ABMXTrainingPark> CachedPark;
+    bool bGrinding = false;
+    FVector GrindStart = FVector::ZeroVector;
+    FVector GrindAxis = FVector::ForwardVector; // unit, Start -> End
+    float GrindLength = 0.0f;
+    float GrindDistance = 0.0f;
+    float GrindDir = 1.0f;          // +1 riding toward End, -1 toward Start
+    float GrindSpeed = 0.0f;
+    float GrindBalance = 0.0f;
+    float GrindSeconds = 0.0f;
+    float GrindPointAccum = 0.0f;
+    float GrindCooldown = 0.0f;
+    float GrindPosePitch = 0.0f;    // icepick (+) / toothpick (-)
+    float GrindPoseRoll = 0.0f;     // feeble / smith
+    bool bGrindInputArmed = false;
     FVector ResetLocation = FVector(-150.0f, -1150.0f, 60.0f);
     FRotator ResetRotation = FRotator(0.0f, 180.0f, 0.0f);
 

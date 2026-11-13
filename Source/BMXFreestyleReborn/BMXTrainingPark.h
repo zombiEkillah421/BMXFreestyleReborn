@@ -8,6 +8,15 @@ class UStaticMesh;
 class UMaterialInterface;
 class USceneComponent;
 
+// v0.4.0: a straight grindable edge in world space (rail top, ledge or
+// deck edge). The rider snaps to these.
+struct FBMXGrindSegment
+{
+    FVector Start = FVector::ZeroVector;
+    FVector End = FVector::ZeroVector;
+    FString Label;
+};
+
 // A self-contained training park. All solid obstacles use their visible mesh
 // as their collision surface: there are no invisible ramp collider substitutes.
 UCLASS()
@@ -16,6 +25,7 @@ class BMXFREESTYLEREBORN_API ABMXTrainingPark : public AActor
     GENERATED_BODY()
 public:
     ABMXTrainingPark();
+    const TArray<FBMXGrindSegment>& GetGrindSegments() const { return GrindSegments; }
 
 protected:
     virtual void BeginPlay() override;
@@ -53,4 +63,9 @@ private:
     void AddProfileMound(const FVector& Origin, float Yaw, float Width,
                          const TArray<FVector2D>& Profile, UMaterialInterface* Material);
     void AddDirtJump(float LipStartX, float Y);
+    // Registers a grindable edge given in park-local space.
+    void AddGrindEdge(const FVector& LocalStart, const FVector& LocalEnd, const TCHAR* Label);
+    // Both long top edges of an axis-aligned box (ledges, tabletop deck).
+    void AddBoxGrindEdges(const FVector& Center, const FVector& Dimensions, const TCHAR* Label);
+    TArray<FBMXGrindSegment> GrindSegments;
 };
